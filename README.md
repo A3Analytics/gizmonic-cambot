@@ -14,6 +14,7 @@ repository holds the documents that define them.
 | [Mechanical spec](docs/witness-astra-mechanical-spec.pdf) | Case, clamp, and magnet mount, written for CAD |
 | [Firmware repository plan](docs/witness-firmware-repo-plan.pdf) | On-board software, API, agent, and repo layout |
 | [Setup guide](docs/SETUP.md) | Installing a camera, written for a person or a coding agent |
+| [FIXR](fixr/README.md) | Per-computer install notes, host profile schema, and the LAN registrar |
 
 HTML copies of the same documents are next to the PDFs. Sources, diagrams, and
 `build.sh` are in `docs/src` and `docs/build.sh`. Rebuilding needs pandoc and

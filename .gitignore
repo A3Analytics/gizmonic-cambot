@@ -1,2 +1,12 @@
 .DS_Store
 .preview/
+.env
+**/.env
+**/secrets.h
+openai_api_key.txt
+fixr/run/
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+

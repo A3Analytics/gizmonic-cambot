@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fixr/schema/host-profile.schema.json",
+  "title": "FIXR host profile",
+  "description": "Machine facts and install results for one computer. Secret values are never stored. Password and token fields name the environment variable that holds the value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "observed_at", "os", "python", "tools", "secrets", "install_notes"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Stable short name for this computer, used as the profile filename."
+    },
+    "observed_at": { "type": "string", "format": "date" },
+    "os": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "version", "arch"],
+      "properties": {
+        "family": { "enum": ["darwin", "linux", "windows"] },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "build": { "type": "string" },
+        "arch": { "type": "string" },
+        "cpu": { "type": "string" },
+        "logical_cpu": { "type": "integer", "minimum": 1 },
+        "shell": { "type": "string" },
+        "hostname": { "type": "string" }
+      }
+    },
+    "python": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["use"],
+      "properties": {
+        "path_default": { "$ref": "#/$defs/python_install" },
+        "use": { "$ref": "#/$defs/python_install" }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["witness"],
+      "properties": {
+        "pipx": { "type": ["string", "null"] },
+        "platformio": { "type": ["string", "null"] },
+        "ffmpeg": { "type": ["string", "null"] },
+        "esptool": { "type": ["string", "null"] },
+        "cmake": { "type": ["string", "null"] },
+        "ninja": { "type": ["string", "null"] },
+        "esp_idf": {
+          "type": ["string", "null"],
+          "description": "Installed ESP-IDF version. The plan says 5.x and does not pin a release."
+        },
+        "witness": {
+          "type": ["string", "null"],
+          "description": "Version of the witness CLI, or null when milestone M2 is not installed."
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "interface": { "type": "string" },
+        "lan_ipv4": { "type": "string" },
+        "wifi_ssid": {
+          "type": "string",
+          "description": "Network name only. The password belongs in WITNESS_WIFI_PASSWORD."
+        },
+        "wifi_band_note": { "type": "string" },
+        "registrar_port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wifi_password_env", "camera_password_env"],
+      "properties": {
+        "wifi_password_env": { "const": "WITNESS_WIFI_PASSWORD" },
+        "camera_password_env": { "const": "WITNESS_CAMERA_PASSWORD" },
+        "model_api_key_env": { "const": "WITNESS_MODEL_KEY" }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time_zone", "scene"],
+      "properties": {
+        "time_zone": {
+          "type": "string",
+          "description": "IANA time zone. America/Los_Angeles is US Pacific."
+        },
+        "scene": { "type": "string" },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_url", "name"],
+          "properties": {
+            "base_url": { "type": "string" },
+            "name": { "type": "string" },
+            "api_key_file": {
+              "type": "string",
+              "description": "Path to a gitignored file. Never store the key itself."
+            }
+          }
+        }
+      }
+    },
+    "ask_before_setup": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Facts the agent must ask the user for. Never fill these by guessing."
+    },
+    "install_notes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/note" }
+    }
+  },
+  "$defs": {
+    "python_install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "version", "meets_guide"],
+      "properties": {
+        "executable": { "type": "string" },
+        "version": { "type": "string" },
+        "implementation": { "type": "string" },
+        "meets_guide": {
+          "type": "boolean",
+          "description": "True when this interpreter is Python 3.10 or newer, as docs/SETUP.md requires."
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "result", "detail"],
+      "properties": {
+        "step": { "type": "string" },
+        "result": { "enum": ["ok", "failed", "skipped", "untested"] },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}

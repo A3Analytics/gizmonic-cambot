@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fixr/schema/camera-registration.schema.json",
+  "title": "Camera registration",
+  "description": "JSON body a camera POSTs to the registrar at /api/register when it joins the LAN. The registrar records the TCP source address as the camera IP. A body ip, if present, must match that address. The camera password is not part of this message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$",
+      "description": "Camera name, typically witness- plus the last 4 hex digits of the MAC."
+    },
+    "ip": {
+      "type": "string",
+      "description": "Optional. Must equal the TCP source address the registrar sees."
+    },
+    "fw": { "type": "string", "maxLength": 32 },
+    "board": { "type": "string", "maxLength": 64 }
+  }
+}
