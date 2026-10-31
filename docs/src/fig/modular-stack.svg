@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 330" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12">
+  <style>
+    .kit { fill: #e6f3f4; stroke: #0f6c7a; stroke-width: 1.5; }
+    .uni { fill: #eef0f4; stroke: #5b6678; stroke-width: 1.5; }
+    .foot { fill: #fff6e0; stroke: #9a6700; stroke-width: 1.5; }
+    .mag { fill: #9aa5b5; stroke: #5b6678; }
+    .t { fill: #1c2330; font-weight: 600; }
+    .s { fill: #5b6678; font-size: 10.5px; }
+    .g { fill: #0f6c7a; font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+    .dash { stroke: #9aa5b5; stroke-dasharray: 4 3; fill: none; }
+  </style>
+
+  <text class="g" x="20" y="22">BOARD KIT (one per camera board)</text>
+  <text class="g" x="300" y="22">UNIVERSAL</text>
+  <text class="g" x="500" y="22">FEET (swap freely, or design your own)</text>
+
+  <!-- front cover -->
+  <rect class="kit" x="20" y="40" width="34" height="150" rx="6"/>
+  <circle cx="37" cy="70" r="7" fill="#1c2330"/>
+  <text class="t" x="37" y="212" text-anchor="middle">Front</text>
+  <text class="s" x="37" y="226" text-anchor="middle">cover</text>
+  <text class="s" x="37" y="240" text-anchor="middle">lens window</text>
+
+  <!-- sled with board -->
+  <rect class="kit" x="90" y="40" width="44" height="150" rx="4"/>
+  <rect x="104" y="46" width="8" height="138" fill="#2f6b3a"/>
+  <rect x="96" y="60" width="8" height="18" fill="#1c2330"/>
+  <text class="t" x="112" y="212" text-anchor="middle">Sled</text>
+  <text class="s" x="112" y="226" text-anchor="middle">holds PCB +</text>
+  <text class="s" x="112" y="240" text-anchor="middle">camera module</text>
+
+  <!-- rear shell -->
+  <rect class="uni" x="230" y="40" width="44" height="150" rx="6"/>
+  <rect class="uni" x="274" y="96" width="22" height="9"/>
+  <rect class="uni" x="274" y="113" width="22" height="9"/>
+  <circle cx="290" cy="109" r="2.6" fill="#5b6678"/>
+  <text class="t" x="262" y="212" text-anchor="middle">Rear shell</text>
+  <text class="s" x="262" y="226" text-anchor="middle">USB-C, SD door,</text>
+  <text class="s" x="262" y="240" text-anchor="middle">2-finger knuckle</text>
+
+  <path class="dash" d="M54,115 L88,115"/>
+  <path class="dash" d="M134,115 L228,115"/>
+  <text class="s" x="150" y="108">slides in, 2&#215; M2</text>
+
+  <!-- mount interface label -->
+  <rect x="310" y="78" width="160" height="62" rx="6" fill="#ffffff" stroke="#0f6c7a" stroke-width="1.2"/>
+  <text class="t" x="390" y="98" text-anchor="middle">W-Mount interface</text>
+  <text class="s" x="390" y="114" text-anchor="middle">GoPro-style knuckle, M5 bolt</text>
+  <text class="s" x="390" y="128" text-anchor="middle">camera = 2 fingers, foot = 3</text>
+
+  <!-- clamp -->
+  <path class="foot" d="M510,50 h80 v18 h-60 v62 h60 v18 h-80 z"/>
+  <rect class="foot" x="540" y="34" width="22" height="16"/>
+  <rect x="588" y="122" width="44" height="7" fill="#5b6678"/>
+  <rect x="628" y="114" width="10" height="23" rx="2" fill="#5b6678"/>
+  <rect x="566" y="113" width="22" height="25" rx="3" fill="#9aa5b5"/>
+  <text class="t" x="560" y="212" text-anchor="middle">Screw clamp</text>
+  <text class="s" x="560" y="226" text-anchor="middle">0&#8211;35 mm jaw,</text>
+  <text class="s" x="560" y="240" text-anchor="middle">printed screw</text>
+
+  <!-- magnet puck -->
+  <rect class="foot" x="650" y="130" width="90" height="24" rx="5"/>
+  <rect class="foot" x="684" y="114" width="22" height="16"/>
+  <rect class="mag" x="660" y="141" width="16" height="7"/>
+  <rect class="mag" x="687" y="141" width="16" height="7"/>
+  <rect class="mag" x="714" y="141" width="16" height="7"/>
+  <text class="t" x="695" y="212" text-anchor="middle">Magnet puck</text>
+  <text class="s" x="695" y="226" text-anchor="middle">slide-in magnets,</text>
+  <text class="s" x="695" y="240" text-anchor="middle">glue in place</text>
+
+  <!-- template -->
+  <rect x="180" y="270" width="570" height="44" rx="6" fill="#ffffff" stroke="#9a6700" stroke-dasharray="5 3" stroke-width="1.3"/>
+  <text class="t" x="465" y="290" text-anchor="middle">Foot template: any base + the 3-finger knuckle module</text>
+  <text class="s" x="465" y="305" text-anchor="middle">zip-tie, VHB pad, 2020 T-slot, 1/4"-20 tripod adapter, suction cup, off-the-shelf GoPro mounts</text>
+</svg>
