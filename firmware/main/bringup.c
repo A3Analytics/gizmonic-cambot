@@ -268,7 +268,6 @@ void app_main(void) {
     wifi_events = xEventGroupCreate();
     start_wifi();
     start_http();
-    witness_recorder_start(camera_lock);
 #ifndef WITNESS_MODEL_KEY
 #define WITNESS_MODEL_KEY ""
 #endif
@@ -278,6 +277,8 @@ void app_main(void) {
 #ifndef WITNESS_JEV_KEY
 #define WITNESS_JEV_KEY ""
 #endif
+    witness_indexer_set_keys(WITNESS_MODEL_KEY, WITNESS_JEV_KEY);
+    witness_recorder_start(camera_lock);
     witness_llm_drivers_ready();
     printf("llm openai=%s anthropic=%s jev=%s\n", WITNESS_MODEL_KEY[0] ? "set" : "missing",
            WITNESS_ANTHROPIC_KEY[0] ? "set" : "missing", WITNESS_JEV_KEY[0] ? "set" : "missing");

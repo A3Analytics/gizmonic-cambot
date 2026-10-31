@@ -77,10 +77,20 @@ async function load() {
     const img = document.createElement("img");
     img.alt = "Live view from " + cam.id;
     img.src = "/api/cameras/" + encodeURIComponent(cam.id) + "/frame.jpg?t=" + stamp;
+    const caption = document.createElement("p");
+    caption.className = "meta";
+    fetch("/api/cameras/" + encodeURIComponent(cam.id) + "/caption")
+      .then((res) => res.status === 200 ? res.json() : null)
+      .then((row) => {
+        if (!row || !row.caption) return;
+        const objects = Array.isArray(row.objects) && row.objects.length ? " (" + row.objects.join(", ") + ")" : "";
+        caption.textContent = (row.t || "") + " — " + row.caption + objects;
+      })
+      .catch(() => {});
     const err = document.createElement("p");
     err.className = "err";
     if (cam.last_view_error) err.textContent = cam.last_view_error;
-    card.append(title, meta, img, err);
+    card.append(title, meta, img, caption, err);
     return card;
   }));
 }
@@ -183,22 +193,25 @@ class Registry:
             self.save()
 
 
-def fetch_frame(ip: str) -> tuple[int, bytes, str]:
+def fetch_authed(ip: str, path: str, limit: int) -> tuple[int, bytes, str]:
     password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
     if not password:
         return 503, b"WITNESS_CAMERA_PASSWORD is not set\n", "text/plain"
-    url = f"http://{ip}{FRAME_PATH}"
-    req = urllib.request.Request(url)
+    req = urllib.request.Request(f"http://{ip}{path}")
     req.add_header("Authorization", "Bearer " + password)
     try:
         with urllib.request.urlopen(req, timeout=8) as resp:
-            body = resp.read(2_000_000)
-            ctype = resp.headers.get("Content-Type", "image/jpeg")
-            return 200, body, ctype
+            body = resp.read(limit)
+            ctype = resp.headers.get("Content-Type", "application/octet-stream")
+            return resp.status, body, ctype
     except urllib.error.HTTPError as exc:
         return 502, f"camera returned HTTP {exc.code}\n".encode(), "text/plain"
     except Exception as exc:
         return 502, f"camera unreachable: {exc.__class__.__name__}\n".encode(), "text/plain"
+
+
+def fetch_frame(ip: str) -> tuple[int, bytes, str]:
+    return fetch_authed(ip, FRAME_PATH, 2_000_000)
 
 
 def make_handler(registry: Registry):
@@ -239,6 +252,19 @@ def make_handler(registry: Registry):
                 else:
                     registry.note_view(camera_id, body.decode().strip())
                 self._send(status, body, ctype)
+                return
+            caption_suffix = "/caption"
+            if path.startswith(prefix) and path.endswith(caption_suffix):
+                camera_id = path[len(prefix) : -len(caption_suffix)]
+                camera = registry.get(camera_id)
+                if camera is None:
+                    self._send(404, b"unknown camera\n", "text/plain")
+                    return
+                status, body, ctype = fetch_authed(camera["ip"], "/api/v1/index/latest", 8192)
+                if status == 204:
+                    self._send(204, b"", "application/json")
+                    return
+                self._send(status, body, ctype if status == 200 else "text/plain")
                 return
             self._send(404, b"not found\n", "text/plain")
 
@@ -326,16 +352,26 @@ def run_check() -> int:
             raise SystemExit("camera missing from list")
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=3) as resp:
             page = resp.read().decode()
-        if "Witness registrar" not in page:
+        if "Witness registrar" not in page or "/caption" not in page:
             raise SystemExit("page missing title")
-        frame_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/frame.jpg"
+        caption_missing = f"http://127.0.0.1:{port}/api/cameras/no-such/caption"
         try:
-            urllib.request.urlopen(frame_url, timeout=3)
+            urllib.request.urlopen(caption_missing, timeout=3)
         except urllib.error.HTTPError as exc:
-            if exc.code not in (502, 503):
-                raise SystemExit(f"unexpected frame status {exc.code}")
+            if exc.code != 404:
+                raise SystemExit(f"unexpected missing-camera caption status {exc.code}")
         else:
-            raise SystemExit("frame fetch should fail without a camera")
+            raise SystemExit("unknown camera caption should be 404")
+        frame_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/frame.jpg"
+        caption_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/caption"
+        for url, label in ((frame_url, "frame"), (caption_url, "caption")):
+            try:
+                urllib.request.urlopen(url, timeout=3)
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (502, 503):
+                    raise SystemExit(f"unexpected {label} status {exc.code}")
+            else:
+                raise SystemExit(f"{label} fetch should fail without a camera")
     finally:
         httpd.shutdown()
         check_file = RUN / "cameras-check.json"

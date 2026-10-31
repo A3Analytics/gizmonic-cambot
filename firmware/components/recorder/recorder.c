@@ -15,7 +15,10 @@
 #include "freertos/task.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
+#include "witness_gray.h"
 #include "witness_idx.h"
+#include "witness_keyframe.h"
+#include "witness_motion.h"
 #include "witness_time.h"
 
 static bool sd_ready;
@@ -24,8 +27,15 @@ static FILE *seg_mjpg;
 static FILE *seg_idx;
 static time_t seg_minute = -1;
 static bool seg_unsynced;
+static uint32_t seg_frame;
+static char seg_name[40];
 static uint8_t *copy_buf;
 static size_t copy_cap;
+static uint8_t *prev_gray;
+static uint8_t *curr_gray;
+static size_t prev_gray_len;
+static bool have_keyframe;
+static time_t last_keyframe;
 
 bool witness_sd_ready(void) {
     return sd_ready;
@@ -145,6 +155,7 @@ static bool open_segment(bool synced) {
         snprintf(path, sizeof path, "%s/%s", dir, name);
         seg_unsynced = false;
         seg_minute = minute;
+        snprintf(seg_name, sizeof seg_name, "%s", name);
         evict_oldest();
     }
     char mjpg[200], idx[200];
@@ -156,10 +167,12 @@ static bool open_segment(bool synced) {
         close_segment();
         return false;
     }
+    long idx_size = ftell(seg_idx);
+    seg_frame = idx_size > 0 ? (uint32_t)(idx_size / WITNESS_IDX_SIZE) : 0;
     return true;
 }
 
-static void append_jpeg(const uint8_t *jpeg, size_t len) {
+static bool append_jpeg(const uint8_t *jpeg, size_t len, uint16_t motion_milli, uint32_t *frame_out) {
     bool synced = witness_time_synced();
     time_t minute = 0;
     if (synced) {
@@ -169,25 +182,30 @@ static void append_jpeg(const uint8_t *jpeg, size_t len) {
     if (!seg_mjpg || seg_unsynced != !synced || (synced && minute != seg_minute)) {
         if (!open_segment(synced)) {
             printf("recording=fail err=open\n");
-            return;
+            return false;
         }
     }
     long offset = ftell(seg_mjpg);
     if (offset < 0) {
-        return;
+        return false;
     }
     if (fwrite(jpeg, 1, len, seg_mjpg) != len) {
         printf("recording=fail err=write\n");
-        return;
+        return false;
     }
     uint8_t raw[WITNESS_IDX_SIZE];
     uint64_t t_ms = synced ? (uint64_t)time(NULL) * 1000 : 0;
-    if (witness_idx_encode(raw, sizeof raw, t_ms, (uint32_t)offset, (uint32_t)len, 0) < 0) {
-        return;
+    if (witness_idx_encode(raw, sizeof raw, t_ms, (uint32_t)offset, (uint32_t)len, motion_milli) < 0) {
+        return false;
     }
     fwrite(raw, 1, sizeof raw, seg_idx);
     fflush(seg_mjpg);
     fflush(seg_idx);
+    if (frame_out) {
+        *frame_out = seg_frame;
+    }
+    seg_frame++;
+    return true;
 }
 
 static void recorder_task(void *arg) {
@@ -213,7 +231,29 @@ static void recorder_task(void *arg) {
             }
             xSemaphoreGive(camera_lock);
             if (len > 0) {
-                append_jpeg(copy_buf, len);
+                if (!prev_gray) {
+                    prev_gray = heap_caps_malloc(48 * 1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                    curr_gray = heap_caps_malloc(48 * 1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                }
+                uint16_t motion = 0;
+                size_t gray_len = 0;
+                if (prev_gray && curr_gray &&
+                    witness_gray_eighth(copy_buf, len, curr_gray, 48 * 1024, &gray_len) == ESP_OK && gray_len > 0) {
+                    motion = witness_motion_milli(prev_gray_len == gray_len ? prev_gray : NULL, curr_gray, gray_len);
+                    memcpy(prev_gray, curr_gray, gray_len);
+                    prev_gray_len = gray_len;
+                }
+                uint32_t frame_index = 0;
+                bool synced = witness_time_synced();
+                if (append_jpeg(copy_buf, len, motion, &frame_index) && synced) {
+                    time_t now = time(NULL);
+                    int64_t elapsed = have_keyframe ? (int64_t)(now - last_keyframe) * 1000 : 0;
+                    if (witness_keyframe_due(have_keyframe, elapsed, motion, false)) {
+                        have_keyframe = true;
+                        last_keyframe = now;
+                        witness_indexer_submit(copy_buf, len, now, motion, frame_index, seg_name);
+                    }
+                }
                 frames++;
                 if (frames == 1 || frames % 300 == 0) {
                     printf("recording=ok frames=%u synced=%s\n", frames, witness_time_synced() ? "yes" : "no");
@@ -264,7 +304,9 @@ esp_err_t witness_recorder_start(SemaphoreHandle_t lock) {
     if (mount_sd() != ESP_OK) {
         return ESP_FAIL;
     }
-    if (xTaskCreate(recorder_task, "recorder", 12288, NULL, 4, NULL) != pdPASS) {
+    witness_indexer_start();
+    if (xTaskCreatePinnedToCore(recorder_task, "recorder", 16384, NULL, 4, NULL, 1) != pdPASS &&
+        xTaskCreate(recorder_task, "recorder", 16384, NULL, 4, NULL) != pdPASS) {
         printf("recording=fail err=task\n");
         return ESP_FAIL;
     }

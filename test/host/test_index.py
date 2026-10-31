@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import datetime, timedelta, timezone
 
 from host.witness_index.budget import Budget
@@ -57,6 +58,37 @@ class FakeDecider:
         self.sizes.append(len(frames))
         scores = [{question.label: self.score for question in questions} for _frame in frames]
         return ScoredFrames(scores=scores, tokens=3, model=self.model)
+
+
+def _motion_milli(previous, current):
+    if previous is None or len(previous) != len(current) or not current:
+        return 0
+    total = sum(abs(left - right) for left, right in zip(previous, current))
+    denom = len(current) * 255
+    milli = (total * 1000 + denom // 2) // denom
+    return min(1000, milli)
+
+
+def test_motion_milli_and_keyframe_match_c(tmp_path):
+    same = [0, 1, 2, 3, 4, 5, 6, 7]
+    moved = [255] * 8
+    assert _motion_milli(None, same) == 0
+    assert _motion_milli(same, same) == 0
+    assert _motion_milli(same, moved) == 986
+    binary = tmp_path / "test_motion_bin"
+    subprocess.check_call(
+        [
+            "cc",
+            "-I",
+            "firmware/components/index/include",
+            "-o",
+            str(binary),
+            "test/host/c/test_motion.c",
+            "firmware/components/index/motion.c",
+            "firmware/components/index/keyframe.c",
+        ]
+    )
+    subprocess.check_call([str(binary)])
 
 
 def test_motion_is_quiet_on_identical_frames_and_high_when_the_shape_moves():

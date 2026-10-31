@@ -611,6 +611,20 @@ static esp_err_t mcp_post(httpd_req_t *req) {
     return err;
 }
 
+static esp_err_t latest_get(httpd_req_t *req) {
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    char body[2048];
+    if (!witness_index_copy_latest(body, sizeof body)) {
+        httpd_resp_set_status(req, "204 No Content");
+        return httpd_resp_send(req, "", 0);
+    }
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, body);
+}
+
 void witness_http_register(httpd_handle_t server, const char *token) {
     bearer = token;
     httpd_uri_t routes[] = {
@@ -618,6 +632,7 @@ void witness_http_register(httpd_handle_t server, const char *token) {
         {.uri = "/api/v1/recordings", .method = HTTP_GET, .handler = recordings_get},
         {.uri = "/api/v1/frame/*", .method = HTTP_GET, .handler = frame_at_get},
         {.uri = "/api/v1/clip.mjpg", .method = HTTP_GET, .handler = clip_get},
+        {.uri = "/api/v1/index/latest", .method = HTTP_GET, .handler = latest_get},
         {.uri = "/mcp", .method = HTTP_POST, .handler = mcp_post},
     };
     for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++) {
