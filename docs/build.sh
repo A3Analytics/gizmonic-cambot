@@ -14,7 +14,7 @@ docs=(
   "$src/whitepaper.md:witness-whitepaper"
   "$src/astra-mechanical-spec.md:witness-astra-mechanical-spec"
   "$src/firmware-repo-plan.md:witness-firmware-repo-plan"
-  "$here/SETUP.md:witness-setup-guide"
+  "$here/../fixr/SETUP.md:witness-setup-guide"
 )
 
 for entry in "${docs[@]}"; do

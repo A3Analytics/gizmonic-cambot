@@ -7,10 +7,22 @@ date: "Guide rev A · targets firmware v0.x · October 2026"
 
 <div class="note">
 <strong>Status.</strong> This guide describes the v1 setup flow planned in the
-repository plan. Commands under <code>witness</code> ship with milestone M2.
-Until then, the prototype firmware in the Lloyd robot repository covers flashing
-and Wi-Fi only.
+repository plan. Commands under <code>witness</code> ship with milestone M2
+and are not in this repository yet. Until then, flash the setup test in
+<code>firmware/</code>. It joins Wi-Fi and registers with the registrar on
+this computer. Do not invent <code>witness</code> commands.
 </div>
+
+## Proven on
+
+This guide was carried out on [Waterbear](profiles/waterbear.json). The notes
+from that run are [profiles/waterbear.md](profiles/waterbear.md).
+
+An agent reads this file first, then the profile for the computer it is on.
+If these steps fail on another system, add `profiles/<id>.json` matching
+[schema/host-profile.schema.json](schema/host-profile.schema.json) and
+`profiles/<id>.md` describing what that computer needed. Leave every secret
+value out of both files.
 
 ## 0. Agent contract (read first)
 

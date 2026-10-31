@@ -13,12 +13,13 @@ repository holds the documents that define them.
 | [White paper](docs/witness-whitepaper.pdf) | What it is and how a question becomes an answer |
 | [Mechanical spec](docs/witness-astra-mechanical-spec.pdf) | Case, clamp, and magnet mount, written for CAD |
 | [Firmware repository plan](docs/witness-firmware-repo-plan.pdf) | On-board software, API, agent, and repo layout |
-| [Setup guide](docs/SETUP.md) | Installing a camera, written for a person or a coding agent |
-| [FIXR](fixr/README.md) | Per-computer install notes, host profile schema, and the LAN registrar |
+| [Setup guide](fixr/SETUP.md) | Installing a camera, written for a person or a coding agent |
+| [FIXR](fixr/README.md) | That guide, per-computer profiles, and the LAN registrar |
 
-HTML copies of the same documents are next to the PDFs. Sources, diagrams, and
-`build.sh` are in `docs/src` and `docs/build.sh`. Rebuilding needs pandoc and
-Google Chrome.
+HTML copies of the same documents are next to the PDFs. Sources for the white
+paper, mechanical spec, and firmware plan are in `docs/src`. The setup guide
+source is `fixr/SETUP.md`. `docs/build.sh` rebuilds the HTML and PDF. Rebuilding
+needs pandoc and Google Chrome.
 
 `reference/from-lloyd-barbot/` holds the board files these documents were
 written from.

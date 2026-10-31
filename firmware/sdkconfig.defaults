@@ -17,3 +17,7 @@ CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
 
 # Wi-Fi setup and the HTTP client need more than the 3584-byte default.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Segment names do not fit 8.3 FAT names.
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255

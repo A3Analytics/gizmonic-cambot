@@ -1,10 +1,10 @@
-# FIXR agent instructions
+# Waterbear setup notes
 
-Read [`docs/SETUP.md`](../docs/SETUP.md) section 0 first. This file is the
-host-specific record for the computer in
-[`profiles/waterbear.json`](profiles/waterbear.json). Other computers get their
-own profile beside that file. The schema is
-[`schema/host-profile.schema.json`](schema/host-profile.schema.json).
+Read [`fixr/SETUP.md`](../SETUP.md) section 0 first. This file is the
+contributed record for the computer in
+[`waterbear.json`](waterbear.json). Another computer adds its own
+`profiles/<id>.json` and `profiles/<id>.md` beside these. The schema is
+[`host-profile.schema.json`](../schema/host-profile.schema.json).
 
 ## This computer
 
@@ -162,7 +162,7 @@ own access password. This host reads one password from
 
 ## After the board is connected
 
-Follow `docs/SETUP.md` from S3. Expect one port with kind `ttl`. Stop after
+Follow `fixr/SETUP.md` from S3. Expect one port with kind `ttl`. Stop after
 two failed attempts at the same step and report what you saw. Update
 `install_notes` in the profile with `ok`, `failed`, `skipped`, or `untested`,
-and rebuild nothing unless you also changed a document under `docs/`.
+and rebuild with `docs/build.sh` if you changed `fixr/SETUP.md` or a document under `docs/src`.

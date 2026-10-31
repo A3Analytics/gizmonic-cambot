@@ -270,6 +270,7 @@ Code, Codex, …)</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
+<li><a href="#proven-on" id="toc-proven-on">Proven on</a></li>
 <li><a href="#agent-contract-read-first" id="toc-agent-contract-read-first">0. Agent contract (read
 first)</a></li>
 <li><a href="#what-you-need" id="toc-what-you-need">1. What you
@@ -298,9 +299,19 @@ your editor (MCP)</a></li>
 <div class="note">
 <p><strong>Status.</strong> This guide describes the v1 setup flow
 planned in the repository plan. Commands under <code>witness</code> ship
-with milestone M2. Until then, the prototype firmware in the Lloyd robot
-repository covers flashing and Wi-Fi only.</p>
+with milestone M2 and are not in this repository yet. Until then, flash
+the setup test in <code>firmware/</code>. It joins Wi-Fi and registers
+with the registrar on this computer. Do not invent <code>witness</code>
+commands.</p>
 </div>
+<h2 id="proven-on">Proven on</h2>
+<p>This guide was carried out on <a href="profiles/waterbear.json">Waterbear</a>. The notes from that run
+are <a href="profiles/waterbear.md">profiles/waterbear.md</a>.</p>
+<p>An agent reads this file first, then the profile for the computer it
+is on. If these steps fail on another system, add
+<code>profiles/&lt;id&gt;.json</code> matching <a href="schema/host-profile.schema.json">schema/host-profile.schema.json</a>
+and <code>profiles/&lt;id&gt;.md</code> describing what that computer
+needed. Leave every secret value out of both files.</p>
 <h2 id="agent-contract-read-first">0. Agent contract (read first)</h2>
 <p>This section is for coding agents. People can skip to section 1.</p>
 <p><strong>Goal:</strong> a Witness camera is recording to its SD card,

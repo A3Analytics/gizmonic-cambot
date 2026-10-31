@@ -1,0 +1,13 @@
+[project]
+name = "witness-host"
+version = "0.1.0"
+description = "Host-side Witness model, storage, index, and MCP tests"
+requires-python = ">=3.10"
+dependencies = ["pillow"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["test"]
+markers = [
+    "live: calls OpenAI, Anthropic, or JEV when the matching key is set",
+]

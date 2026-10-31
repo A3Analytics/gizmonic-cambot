@@ -1,13 +1,17 @@
 # FIXR
 
-Shared setup notes for putting a Witness camera on a particular computer.
-The camera steps themselves stay in [`docs/SETUP.md`](../docs/SETUP.md). FIXR
-records the host, what that host already has installed, and what happened when
-an agent tried the guide.
+Setup lives here. [`SETUP.md`](SETUP.md) is the shared guide for a person or a
+coding agent. It was carried out on Waterbear. The system facts are
+[`profiles/waterbear.json`](profiles/waterbear.json), and the notes from that
+run are [`profiles/waterbear.md`](profiles/waterbear.md).
 
-Another person adds a profile by copying `profiles/waterbear.json`, filling it
-from their own machine, and leaving every secret value out. The file must
-match [`schema/host-profile.schema.json`](schema/host-profile.schema.json).
+If the guide fails on another computer, add two files:
+
+- `profiles/<id>.json`, matching [`schema/host-profile.schema.json`](schema/host-profile.schema.json)
+- `profiles/<id>.md`, the setup notes for that system
+
+An agent reads `SETUP.md` first, then the profile for the computer it is on.
+Leave every secret value out of both files.
 
 ## What a profile may contain
 
@@ -60,5 +64,3 @@ This machine has v5.5.6, which the plan does not pin. `firmware/` is the setup
 test. It joins Wi-Fi, POSTs `/api/register`, and serves the live frame. The
 Witness firmware itself is a later step. `witness` ships with milestone M2.
 Until then, do not invent `witness` commands.
-
-Agents follow [`AGENT.md`](AGENT.md).

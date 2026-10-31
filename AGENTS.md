@@ -5,8 +5,10 @@ This repository is the Witness camera specification. Firmware, CAD, and the
 
 ## Which document to follow
 
-- Setting up a physical camera: follow `docs/SETUP.md` from the top. Section 0
-  is the contract. The `witness` commands in that guide ship with firmware
+- Setting up a physical camera: follow `fixr/SETUP.md` from the top. Section 0
+  is the contract. Read the profile for this computer next
+  (`fixr/profiles/waterbear.json` and `fixr/profiles/waterbear.md` on this
+  machine). The `witness` commands in that guide ship with firmware
   milestone M2; until then, say so instead of inventing commands.
 - Designing or changing the case and mounts: `docs/src/astra-mechanical-spec.md`.
   Dimensions marked TBV are not confirmed. Do not replace them with guesses.
@@ -16,7 +18,7 @@ This repository is the Witness camera specification. Firmware, CAD, and the
 
 ## Setup contract
 
-Copied from `docs/SETUP.md`. These rules apply whenever an agent sets a camera
+Copied from `fixr/SETUP.md`. These rules apply whenever an agent sets a camera
 up, from this repo or another.
 
 1. Ask the user for the Wi-Fi SSID, the model endpoint, the time zone, and a
@@ -34,7 +36,7 @@ up, from this repo or another.
 
 ## Working in this repository
 
-- Edit the Markdown in `docs/src` (and `docs/SETUP.md`), then rebuild with
+- Edit the Markdown in `docs/src` and `fixr/SETUP.md`, then rebuild with
   `docs/build.sh`. Commit the sources and the rebuilt HTML and PDF together.
 - Do not commit secrets. `secrets.h`, `.env`, and credential files stay out.
 - `reference/from-lloyd-barbot/` is a copy of the board bring-up that the

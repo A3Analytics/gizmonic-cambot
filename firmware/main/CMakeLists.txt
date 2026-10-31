@@ -7,5 +7,5 @@ endif()
 idf_component_register(
     SRCS "bringup.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_wifi esp_event esp_netif nvs_flash esp_http_server esp_http_client spi_flash
+    REQUIRES esp_wifi esp_event esp_netif nvs_flash esp_http_server esp_http_client spi_flash timebase recorder llm
 )

@@ -22,6 +22,9 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "secrets.h"
+#include "witness_llm_client.h"
+#include "witness_recorder.h"
+#include "witness_time.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 
@@ -136,6 +139,7 @@ static void register_once(void) {
 }
 
 static void register_task(void *arg) {
+    witness_time_start("America/Los_Angeles");
     while (1) {
         xEventGroupWaitBits(wifi_events, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
         register_once();
@@ -208,6 +212,8 @@ static void start_http(void) {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = 80;
     cfg.stack_size = 8192;
+    cfg.max_uri_handlers = 16;
+    cfg.uri_match_fn = httpd_uri_match_wildcard;
     cfg.lru_purge_enable = true;
     httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(httpd_start(&server, &cfg));
@@ -215,6 +221,7 @@ static void start_http(void) {
     httpd_uri_t frame = {.uri = "/api/v1/frame.jpg", .method = HTTP_GET, .handler = frame_get};
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &ping));
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &frame));
+    witness_http_register(server, WITNESS_CAMERA_PASSWORD);
     printf("httpd=ok port=80\n");
 }
 
@@ -261,5 +268,18 @@ void app_main(void) {
     wifi_events = xEventGroupCreate();
     start_wifi();
     start_http();
+    witness_recorder_start(camera_lock);
+#ifndef WITNESS_MODEL_KEY
+#define WITNESS_MODEL_KEY ""
+#endif
+#ifndef WITNESS_ANTHROPIC_KEY
+#define WITNESS_ANTHROPIC_KEY ""
+#endif
+#ifndef WITNESS_JEV_KEY
+#define WITNESS_JEV_KEY ""
+#endif
+    witness_llm_drivers_ready();
+    printf("llm openai=%s anthropic=%s jev=%s\n", WITNESS_MODEL_KEY[0] ? "set" : "missing",
+           WITNESS_ANTHROPIC_KEY[0] ? "set" : "missing", WITNESS_JEV_KEY[0] ? "set" : "missing");
     xTaskCreate(register_task, "register", 8192, NULL, 5, NULL);
 }

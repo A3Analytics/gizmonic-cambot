@@ -132,7 +132,7 @@
         "implementation": { "type": "string" },
         "meets_guide": {
           "type": "boolean",
-          "description": "True when this interpreter is Python 3.10 or newer, as docs/SETUP.md requires."
+          "description": "True when this interpreter is Python 3.10 or newer, as fixr/SETUP.md requires."
         },
         "note": { "type": "string" }
       }

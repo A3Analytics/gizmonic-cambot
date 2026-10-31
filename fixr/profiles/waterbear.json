@@ -19,7 +19,7 @@
       "version": "3.9.6",
       "implementation": "cpython",
       "meets_guide": false,
-      "note": "This is the python3 on PATH. docs/SETUP.md requires Python 3.10 or newer."
+      "note": "This is the python3 on PATH. fixr/SETUP.md requires Python 3.10 or newer."
     },
     "use": {
       "executable": "/opt/homebrew/bin/python3.13",
