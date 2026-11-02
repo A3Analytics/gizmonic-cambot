@@ -9,12 +9,17 @@
 #include "esp_heap_caps.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "esp_heap_caps.h"
+#include "mbedtls/base64.h"
+#include "witness_alert.h"
 #include "witness_llm.h"
 #include "witness_llm_client.h"
 
 #define BATCH 4
 #define BUDGET_FRAMES 2000
 #define QUESTION_MAX 8
+#define EXAMPLE_MAX 4
+#define ALERT_SLOTS 16
 
 typedef struct {
     uint8_t *jpeg;
@@ -26,19 +31,40 @@ typedef struct {
 } keyframe_t;
 
 typedef struct {
+    char id[32];
+    char polarity[8];
+} example_ref_t;
+
+typedef struct {
     char name[48];
     char instructions[240];
     char label[96];
+    example_ref_t examples[EXAMPLE_MAX];
+    int example_count;
+    int box;
+    char box_color[16];
+    char box_instructions[240];
+    int alert;
+    int alert_yes;
+    char alert_url[300];
 } question_t;
+
+typedef struct {
+    char name[48];
+    int previous_hit;
+    int used;
+} alert_slot_t;
 
 static QueueHandle_t keyframes;
 static SemaphoreHandle_t latest_lock;
-static char latest[2048];
+static char latest[4096];
 static const char *openai_key = "";
 static const char *jev_key = "";
 static int frames_today;
 static time_t budget_day;
 static volatile bool index_enabled;
+static volatile bool jev_enabled;
+static alert_slot_t alert_slots[ALERT_SLOTS];
 
 static const char *CAPTION_PROMPT =
     "General camera setup. Testing basic functionality.\n"
@@ -78,6 +104,38 @@ bool witness_indexer_set_enabled(bool enabled) {
     return true;
 }
 
+static void load_jev_enabled(void) {
+    jev_enabled = false;
+    FILE *file = fopen(WITNESS_ROOT "/jev_enabled", "r");
+    if (!file) {
+        return;
+    }
+    int ch = fgetc(file);
+    fclose(file);
+    jev_enabled = ch == '1';
+}
+
+bool witness_jev_enabled(void) {
+    return jev_enabled;
+}
+
+bool witness_jev_set_enabled(bool enabled) {
+    FILE *file = fopen(WITNESS_ROOT "/jev_enabled", "w");
+    if (!file) {
+        return false;
+    }
+    fputc(enabled ? '1' : '0', file);
+    fputc('\n', file);
+    fclose(file);
+    jev_enabled = enabled;
+    printf("jev=%s\n", enabled ? "started" : "stopped");
+    return true;
+}
+
+static bool either_index(void) {
+    return index_enabled || jev_enabled;
+}
+
 bool witness_index_copy_latest(char *dst, size_t cap) {
     if (!dst || cap == 0) {
         return false;
@@ -102,38 +160,140 @@ static void remember_latest(const char *json) {
     xSemaphoreGive(latest_lock);
 }
 
+static int fits(const char *text, size_t cap) {
+    return text && text[0] && strlen(text) < cap;
+}
+
+static int plain_id(const char *text) {
+    size_t length;
+    if (!text || !text[0]) {
+        return 0;
+    }
+    length = strlen(text);
+    if (length > 31) {
+        return 0;
+    }
+    for (size_t i = 0; i < length; i++) {
+        char ch = text[i];
+        if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' ||
+              ch == '-')) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int hex_color(const char *text) {
+    if (!text || text[0] != '#' || strlen(text) != 7) {
+        return 0;
+    }
+    for (int i = 1; i < 7; i++) {
+        char ch = text[i];
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int fill_question(question_t *question, cJSON *item) {
+    const char *name = cJSON_GetStringValue(cJSON_GetObjectItem(item, "name"));
+    const char *instructions = cJSON_GetStringValue(cJSON_GetObjectItem(item, "instructions"));
+    const char *label = cJSON_GetStringValue(cJSON_GetObjectItem(item, "label"));
+    cJSON *examples;
+    cJSON *example;
+    cJSON *box;
+    cJSON *alert;
+    const char *url;
+    const char *when;
+    memset(question, 0, sizeof *question);
+    if (!plain_id(name) || !fits(name, sizeof question->name) || !fits(instructions, sizeof question->instructions) ||
+        !fits(label, sizeof question->label)) {
+        return -1;
+    }
+    snprintf(question->name, sizeof question->name, "%s", name);
+    snprintf(question->instructions, sizeof question->instructions, "%s", instructions);
+    snprintf(question->label, sizeof question->label, "%s", label);
+    examples = cJSON_GetObjectItem(item, "examples");
+    if (cJSON_IsArray(examples)) {
+        cJSON_ArrayForEach(example, examples) {
+            const char *id;
+            const char *polarity;
+            if (question->example_count >= EXAMPLE_MAX || !cJSON_IsObject(example)) {
+                continue;
+            }
+            id = cJSON_GetStringValue(cJSON_GetObjectItem(example, "id"));
+            polarity = cJSON_GetStringValue(cJSON_GetObjectItem(example, "polarity"));
+            if (!plain_id(id) || !fits(id, sizeof question->examples[0].id)) {
+                continue;
+            }
+            if (!polarity || (strcmp(polarity, "yes") != 0 && strcmp(polarity, "no") != 0)) {
+                continue;
+            }
+            snprintf(question->examples[question->example_count].id, sizeof question->examples[0].id, "%s", id);
+            snprintf(question->examples[question->example_count].polarity, sizeof question->examples[0].polarity, "%s",
+                     polarity);
+            question->example_count++;
+        }
+    }
+    box = cJSON_GetObjectItem(item, "box");
+    if (cJSON_IsObject(box) && cJSON_IsTrue(cJSON_GetObjectItem(box, "enabled"))) {
+        const char *color = cJSON_GetStringValue(cJSON_GetObjectItem(box, "color"));
+        const char *box_instructions = cJSON_GetStringValue(cJSON_GetObjectItem(box, "instructions"));
+        if (fits(box_instructions, sizeof question->box_instructions)) {
+            question->box = 1;
+            snprintf(question->box_color, sizeof question->box_color, "%s", hex_color(color) ? color : "#16a34a");
+            snprintf(question->box_instructions, sizeof question->box_instructions, "%s", box_instructions);
+        }
+    }
+    alert = cJSON_GetObjectItem(item, "alert");
+    url = cJSON_IsObject(alert) ? cJSON_GetStringValue(cJSON_GetObjectItem(alert, "url")) : NULL;
+    when = cJSON_IsObject(alert) ? cJSON_GetStringValue(cJSON_GetObjectItem(alert, "when")) : NULL;
+    if (url && strncmp(url, "https://", 8) == 0 && fits(url, sizeof question->alert_url)) {
+        question->alert = 1;
+        question->alert_yes = !when || strcmp(when, "no") != 0;
+        snprintf(question->alert_url, sizeof question->alert_url, "%s", url);
+    }
+    return 0;
+}
+
 static int load_questions(question_t *questions, int cap) {
-    FILE *file = fopen(WITNESS_ROOT "/watch.json", "rb");
+    FILE *file = fopen(WITNESS_NOULS_JSON, "rb");
+    char *raw;
+    size_t got;
+    cJSON *root;
+    int count = 0;
+    cJSON *item = NULL;
+    if (!file) {
+        file = fopen(WITNESS_ROOT "/watch.json", "rb");
+    }
     if (!file) {
         return 0;
     }
-    char raw[4096];
-    size_t got = fread(raw, 1, sizeof raw - 1, file);
-    fclose(file);
-    raw[got] = '\0';
-    cJSON *root = cJSON_Parse(raw);
-    if (!cJSON_IsArray(root)) {
-        cJSON_Delete(root);
+    raw = malloc(32768);
+    if (!raw) {
+        fclose(file);
         return 0;
     }
-    int count = 0;
-    cJSON *item = NULL;
+    got = fread(raw, 1, 32767, file);
+    fclose(file);
+    raw[got] = '\0';
+    root = cJSON_Parse(raw);
+    if (!cJSON_IsArray(root)) {
+        cJSON_Delete(root);
+        free(raw);
+        return 0;
+    }
     cJSON_ArrayForEach(item, root) {
         if (count >= cap || !cJSON_IsObject(item)) {
             continue;
         }
-        const char *name = cJSON_GetStringValue(cJSON_GetObjectItem(item, "name"));
-        const char *instructions = cJSON_GetStringValue(cJSON_GetObjectItem(item, "instructions"));
-        const char *label = cJSON_GetStringValue(cJSON_GetObjectItem(item, "label"));
-        if (!name || !instructions || !label || !name[0] || !instructions[0] || !label[0]) {
-            continue;
+        if (fill_question(&questions[count], item) == 0) {
+            count++;
         }
-        snprintf(questions[count].name, sizeof questions[count].name, "%s", name);
-        snprintf(questions[count].instructions, sizeof questions[count].instructions, "%s", instructions);
-        snprintf(questions[count].label, sizeof questions[count].label, "%s", label);
-        count++;
     }
     cJSON_Delete(root);
+    free(raw);
     return count;
 }
 
@@ -194,26 +354,255 @@ static cJSON *parse_caption(const char *text) {
     return clean;
 }
 
-static bool ask_jev(const uint8_t *jpeg, size_t len, const question_t *questions, int count, cJSON *watch) {
+static char *b64_alloc(const uint8_t *jpeg, size_t len) {
+    size_t cap = 0;
+    size_t wrote = 0;
+    char *text;
+    mbedtls_base64_encode(NULL, 0, &cap, jpeg, len);
+    text = heap_caps_malloc(cap + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!text) {
+        text = malloc(cap + 1);
+    }
+    if (!text) {
+        return NULL;
+    }
+    if (mbedtls_base64_encode((unsigned char *)text, cap, &wrote, jpeg, len) != 0) {
+        free(text);
+        return NULL;
+    }
+    text[wrote] = '\0';
+    return text;
+}
+
+static uint8_t *read_capped(const char *path, size_t cap, size_t *out_len) {
+    FILE *file = fopen(path, "rb");
+    long size;
+    uint8_t *buf;
+    size_t got;
+    if (!file) {
+        return NULL;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return NULL;
+    }
+    size = ftell(file);
+    if (size <= 0 || (size_t)size > cap || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return NULL;
+    }
+    buf = heap_caps_malloc((size_t)size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!buf) {
+        buf = malloc((size_t)size);
+    }
+    if (!buf) {
+        fclose(file);
+        return NULL;
+    }
+    got = fread(buf, 1, (size_t)size, file);
+    fclose(file);
+    if (got != (size_t)size) {
+        free(buf);
+        return NULL;
+    }
+    *out_len = got;
+    return buf;
+}
+
+static int *alert_previous(const char *name) {
+    int free_slot = -1;
+    for (int i = 0; i < ALERT_SLOTS; i++) {
+        if (alert_slots[i].used && strcmp(alert_slots[i].name, name) == 0) {
+            return &alert_slots[i].previous_hit;
+        }
+        if (!alert_slots[i].used && free_slot < 0) {
+            free_slot = i;
+        }
+    }
+    if (free_slot < 0) {
+        free_slot = 0;
+    }
+    snprintf(alert_slots[free_slot].name, sizeof alert_slots[free_slot].name, "%s", name);
+    alert_slots[free_slot].used = 1;
+    alert_slots[free_slot].previous_hit = 0;
+    return &alert_slots[free_slot].previous_hit;
+}
+
+static void maybe_alert(const question_t *question, double score, const char *iso) {
+    int *previous;
+    int saved;
+    const char *side;
+    char text[320];
+    cJSON *payload;
+    char *printed;
+    if (!question->alert || strncmp(question->alert_url, "https://", 8) != 0) {
+        return;
+    }
+    previous = alert_previous(question->name);
+    saved = *previous;
+    if (!witness_alert_edge(previous, score, question->alert_yes)) {
+        return;
+    }
+    side = question->alert_yes ? "yes" : "no";
+    snprintf(text, sizeof text, "Witness: %s is %s (%.2f) at %s", question->label, side, score, iso);
+    payload = cJSON_CreateObject();
+    if (!payload) {
+        *previous = saved;
+        return;
+    }
+    cJSON_AddStringToObject(payload, "text", text);
+    printed = cJSON_PrintUnformatted(payload);
+    cJSON_Delete(payload);
+    if (!printed) {
+        *previous = saved;
+        return;
+    }
+    if (witness_llm_alert(question->alert_url, printed) == ESP_OK) {
+        printf("alert=sent name=%s\n", question->name);
+    } else {
+        *previous = saved;
+        printf("alert=dropped name=%s\n", question->name);
+    }
+    free(printed);
+}
+
+static int box_edges(cJSON *answer, double *top, double *bottom, double *left, double *right) {
+    cJSON *box = cJSON_GetObjectItem(answer, "box");
+    cJSON *top_item = cJSON_GetObjectItem(box, "top");
+    cJSON *bottom_item = cJSON_GetObjectItem(box, "bottom");
+    cJSON *left_item = cJSON_GetObjectItem(box, "left");
+    cJSON *right_item = cJSON_GetObjectItem(box, "right");
+    if (!cJSON_IsNumber(top_item) || !cJSON_IsNumber(bottom_item) || !cJSON_IsNumber(left_item) ||
+        !cJSON_IsNumber(right_item)) {
+        return 0;
+    }
+    *top = top_item->valuedouble;
+    *bottom = bottom_item->valuedouble;
+    *left = left_item->valuedouble;
+    *right = right_item->valuedouble;
+    if (*top < 0 || *bottom > 1 || *left < 0 || *right > 1 || !(*top < *bottom) || !(*left < *right)) {
+        return 0;
+    }
+    return 1;
+}
+
+static bool ask_jev(const uint8_t *jpeg, size_t len, const question_t *questions, int count, cJSON *watch,
+                    cJSON *boxes, const char *iso) {
+    witness_jev_asset assets[QUESTION_MAX * EXAMPLE_MAX];
+    char asset_keys[QUESTION_MAX * EXAMPLE_MAX][8];
+    witness_jev_question outgoing[QUESTION_MAX];
+    char instructions[QUESTION_MAX][640];
+    char *photo = NULL;
+    char *body = NULL;
+    char *response = NULL;
+    int asset_count = 0;
+    int body_cap;
+    int wrote;
+    bool any = false;
+    cJSON *root = NULL;
     if (!jev_key[0] || count <= 0) {
         return false;
     }
-    bool any = false;
-    char response[2048];
+    memset(assets, 0, sizeof assets);
+    memset(outgoing, 0, sizeof outgoing);
+    photo = b64_alloc(jpeg, len);
+    if (!photo) {
+        return false;
+    }
+    body_cap = (int)strlen(photo) + 1024;
     for (int i = 0; i < count; i++) {
-        if (witness_llm_jev(jev_key, jpeg, len, questions[i].name, questions[i].instructions, response,
-                            sizeof response) != ESP_OK) {
-            continue;
+        int used = snprintf(instructions[i], sizeof instructions[i], "%s", questions[i].instructions);
+        outgoing[i].name = questions[i].name;
+        outgoing[i].instructions = instructions[i];
+        outgoing[i].box = questions[i].box;
+        outgoing[i].box_instructions = questions[i].box_instructions;
+        body_cap += (int)strlen(questions[i].instructions) + (int)strlen(questions[i].box_instructions) + 256;
+        for (int e = 0; e < questions[i].example_count && asset_count < QUESTION_MAX * EXAMPLE_MAX; e++) {
+            char path[192];
+            uint8_t *jpeg_bytes;
+            size_t jpeg_len = 0;
+            const char *side;
+            int more;
+            snprintf(path, sizeof path, WITNESS_ROOT "/nouls/%s/%s.jpg", questions[i].name, questions[i].examples[e].id);
+            jpeg_bytes = read_capped(path, WITNESS_NOUL_JPEG_MAX, &jpeg_len);
+            if (!jpeg_bytes) {
+                continue;
+            }
+            assets[asset_count].b64 = b64_alloc(jpeg_bytes, jpeg_len);
+            free(jpeg_bytes);
+            if (!assets[asset_count].b64) {
+                continue;
+            }
+            snprintf(asset_keys[asset_count], sizeof asset_keys[asset_count], "ex_%02d", asset_count);
+            assets[asset_count].key = asset_keys[asset_count];
+            side = strcmp(questions[i].examples[e].polarity, "no") == 0 ? "no" : "yes";
+            more = snprintf(instructions[i] + used, sizeof instructions[i] - (size_t)used, " A %s looks like %s.", side,
+                            asset_keys[asset_count]);
+            if (more > 0 && (size_t)more < sizeof instructions[i] - (size_t)used) {
+                used += more;
+            }
+            body_cap += (int)strlen(assets[asset_count].b64) + 64;
+            asset_count++;
         }
-        cJSON *root = cJSON_Parse(response);
+    }
+    body = heap_caps_malloc((size_t)body_cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!body) {
+        body = malloc((size_t)body_cap);
+    }
+    response = malloc(8192);
+    if (!body || !response) {
+        goto done;
+    }
+    wrote = witness_jev_request(body, (size_t)body_cap, WITNESS_JEV_MODEL, photo, assets, asset_count, outgoing, count);
+    if (wrote < 0 || witness_llm_jev_post(jev_key, body, response, 8192) != ESP_OK) {
+        goto done;
+    }
+    root = cJSON_Parse(response);
+    {
         cJSON *answers = cJSON_GetObjectItem(root, "answers");
-        cJSON *answer = cJSON_GetObjectItem(answers, questions[i].name);
-        cJSON *noul = cJSON_GetObjectItem(answer, "noul");
-        if (cJSON_IsNumber(noul)) {
-            cJSON_AddNumberToObject(watch, questions[i].label, noul->valuedouble);
+        for (int i = 0; i < count; i++) {
+            char box_name[64];
+            cJSON *answer = cJSON_GetObjectItem(answers, questions[i].name);
+            cJSON *noul = cJSON_GetObjectItem(answer, "noul");
+            double score;
+            double top, bottom, left, right;
+            cJSON *box_answer;
+            cJSON *drawn;
+            if (!cJSON_IsNumber(noul)) {
+                continue;
+            }
+            score = noul->valuedouble;
+            cJSON_AddNumberToObject(watch, questions[i].label, score);
             any = true;
+            maybe_alert(&questions[i], score, iso);
+            if (!questions[i].box || score < 0.5) {
+                continue;
+            }
+            snprintf(box_name, sizeof box_name, "%s__box", questions[i].name);
+            box_answer = cJSON_GetObjectItem(answers, box_name);
+            if (!box_edges(box_answer, &top, &bottom, &left, &right)) {
+                continue;
+            }
+            drawn = cJSON_CreateObject();
+            if (!drawn) {
+                continue;
+            }
+            cJSON_AddStringToObject(drawn, "label", questions[i].label);
+            cJSON_AddStringToObject(drawn, "color", questions[i].box_color);
+            cJSON_AddNumberToObject(drawn, "top", top);
+            cJSON_AddNumberToObject(drawn, "bottom", bottom);
+            cJSON_AddNumberToObject(drawn, "left", left);
+            cJSON_AddNumberToObject(drawn, "right", right);
+            cJSON_AddItemToArray(boxes, drawn);
         }
-        cJSON_Delete(root);
+    }
+done:
+    cJSON_Delete(root);
+    free(response);
+    free(body);
+    free(photo);
+    for (int i = 0; i < asset_count; i++) {
+        free((void *)assets[i].b64);
     }
     return any;
 }
@@ -248,7 +637,7 @@ static cJSON *read_day_records(const char *day) {
         if (!file) {
             continue;
         }
-        char line[2048];
+        char line[4096];
         while (fgets(line, sizeof line, file) && cJSON_GetArraySize(rows) < 256) {
             cJSON *row = cJSON_Parse(line);
             if (cJSON_IsObject(row)) {
@@ -373,7 +762,7 @@ static bool budget_allows(int count, time_t when) {
     return frames_today + count <= BUDGET_FRAMES;
 }
 
-static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, bool have_watch) {
+static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, cJSON *boxes, bool have_watch) {
     char iso[40], day[16], hour[8];
     stamp(item->when, iso, sizeof iso, day, sizeof day, hour, sizeof hour);
     cJSON *record = cJSON_CreateObject();
@@ -396,6 +785,11 @@ static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, b
         cJSON_AddStringToObject(record, "model", "typesafe/" WITNESS_JEV_MODEL);
     }
     cJSON_AddItemToObject(record, "watch", watch);
+    if (boxes && cJSON_GetArraySize(boxes) > 0) {
+        cJSON_AddItemToObject(record, "boxes", boxes);
+    } else {
+        cJSON_Delete(boxes);
+    }
     cJSON_AddBoolToObject(record, "verified", false);
     char *printed = cJSON_PrintUnformatted(record);
     if (!printed) {
@@ -408,7 +802,7 @@ static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, b
     mkdir(dir, 0775);
     char path[192];
     snprintf(path, sizeof path, "%s/%s.jsonl", dir, hour);
-    if (append_line(path, printed)) {
+    if (append_line(path, printed) && strlen(printed) < sizeof latest) {
         remember_latest(printed);
     }
     printf("index=ok t=%s motion_milli=%u model=%s\n", iso, (unsigned)item->motion_milli,
@@ -432,7 +826,7 @@ static void flush_batch(keyframe_t *batch, int count) {
     if (count <= 0) {
         return;
     }
-    if (!index_enabled) {
+    if (!either_index()) {
         discard_batch(batch, count);
         return;
     }
@@ -447,12 +841,12 @@ static void flush_batch(keyframe_t *batch, int count) {
     question_t questions[QUESTION_MAX];
     int question_count = load_questions(questions, QUESTION_MAX);
     for (int i = 0; i < count; i++) {
-        if (!index_enabled) {
+        if (!either_index()) {
             discard_batch(batch + i, count - i);
             return;
         }
         cJSON *caption = NULL;
-        if (openai_key[0]) {
+        if (index_enabled && openai_key[0]) {
             char response[3072];
             for (int attempt = 0; attempt < 4 && !caption && index_enabled; attempt++) {
                 if (attempt > 0) {
@@ -467,19 +861,26 @@ static void flush_batch(keyframe_t *batch, int count) {
                 }
             }
         }
-        if (!index_enabled) {
+        if (!either_index()) {
             cJSON_Delete(caption);
             discard_batch(batch + i, count - i);
             return;
         }
+        char iso[40], day[16], hour[8];
         cJSON *watch = cJSON_CreateObject();
-        bool have_watch = ask_jev(batch[i].jpeg, batch[i].len, questions, question_count, watch);
+        cJSON *boxes = cJSON_CreateArray();
+        bool have_watch = false;
+        stamp(batch[i].when, iso, sizeof iso, day, sizeof day, hour, sizeof hour);
+        if (jev_enabled && watch && boxes) {
+            have_watch = ask_jev(batch[i].jpeg, batch[i].len, questions, question_count, watch, boxes, iso);
+        }
         if (caption || have_watch) {
-            write_record(&batch[i], caption, watch, have_watch);
+            write_record(&batch[i], caption, watch, boxes, have_watch);
             frames_today++;
         } else {
             printf("index=dropped\n");
             cJSON_Delete(watch);
+            cJSON_Delete(boxes);
         }
         cJSON_Delete(caption);
         free(batch[i].jpeg);
@@ -494,7 +895,7 @@ static void indexer_task(void *arg) {
     while (1) {
         keyframe_t item;
         if (xQueueReceive(keyframes, &item, pdMS_TO_TICKS(1000)) == pdTRUE) {
-            if (!index_enabled) {
+            if (!either_index()) {
                 free(item.jpeg);
                 continue;
             }
@@ -512,7 +913,7 @@ static void indexer_task(void *arg) {
 
 void witness_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16_t motion_milli, uint32_t frame,
                             const char *seg) {
-    if (!index_enabled || !keyframes || !jpeg || len == 0 || !seg) {
+    if (!either_index() || !keyframes || !jpeg || len == 0 || !seg) {
         return;
     }
     uint8_t *copy = heap_caps_malloc(len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -535,14 +936,15 @@ void witness_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16
 
 void witness_indexer_start(void) {
     load_enabled();
-    printf("index=%s\n", index_enabled ? "started" : "stopped");
+    load_jev_enabled();
+    printf("index=%s jev=%s\n", index_enabled ? "started" : "stopped", jev_enabled ? "started" : "stopped");
     latest_lock = xSemaphoreCreateMutex();
     keyframes = xQueueCreate(BATCH, sizeof(keyframe_t));
     if (!keyframes) {
         printf("index=fail err=queue\n");
         return;
     }
-    if (xTaskCreatePinnedToCore(indexer_task, "indexer", 32768, NULL, 3, NULL, 0) != pdPASS) {
-        xTaskCreate(indexer_task, "indexer", 32768, NULL, 3, NULL);
+    if (xTaskCreatePinnedToCore(indexer_task, "indexer", 49152, NULL, 3, NULL, 0) != pdPASS) {
+        xTaskCreate(indexer_task, "indexer", 49152, NULL, 3, NULL);
     }
 }

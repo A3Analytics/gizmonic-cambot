@@ -21,10 +21,13 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
+
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
@@ -37,6 +40,13 @@ PROFILE = ROOT / "profiles" / "waterbear.json"
 HOST_SCHEMA = ROOT / "schema" / "host-profile.schema.json"
 FRAME_PATH = "/api/v1/frame.jpg"
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$")
+EXAMPLE_RE = re.compile(
+    r"^/api/cameras/(?P<camera>[A-Za-z0-9][A-Za-z0-9_-]{0,31})/nouls/"
+    r"(?P<name>[A-Za-z0-9][A-Za-z0-9_-]{0,31})/examples/"
+    r"(?P<example>[A-Za-z0-9][A-Za-z0-9_-]{0,31})$"
+)
+EXAMPLE_MAX_BYTES = 80 * 1024
+UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 PORT = 8765
 
 PAGE = """<!DOCTYPE html>
@@ -58,11 +68,30 @@ PAGE = """<!DOCTYPE html>
   form.query input { flex: 1; }
   #transcript { max-height: 18rem; overflow: auto; }
   #transcript p { margin: 0.4rem 0; }
+  .switches { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
+  .noul { border-top: 1px solid #e7e5e4; margin-top: 0.9rem; padding-top: 0.8rem; }
+  .noul label, .stack { display: block; margin: 0.35rem 0; }
+  .noul input[type="text"], .noul textarea, .noul select, .noul input[type="url"] { width: 100%; box-sizing: border-box; font: inherit; padding: 0.35rem; }
+  .noul textarea { min-height: 4.2rem; }
+  .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0.4rem 0; }
+  .example-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 0.6rem 0; }
+  .example-side { border: 1px solid #e7e5e4; border-radius: 8px; padding: 0.6rem; }
+  .example-side h3 { font-size: 0.95rem; margin: 0 0 0.35rem; }
+  .example-side.yes { border-color: #86efac; }
+  .example-side.no { border-color: #fda4af; }
+  .example-side p { margin: 0 0 0.4rem; }
+  .examples { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.4rem 0; }
+  .examples figure { margin: 0; width: 5.5rem; }
+  .examples img { width: 5.5rem; height: 5.5rem; object-fit: cover; }
+  .examples figcaption { font-size: 0.8rem; color: #57534e; }
+  @media (max-width: 640px) { .example-pair { grid-template-columns: 1fr; } }
   button.small { font: inherit; padding: 0.25rem 0.45rem; }
   .frame { position: relative; display: inline-block; max-width: 100%; }
   .frame img { display: block; max-width: 100%; }
   .frame.paused { outline: 2px solid #a8a29e; outline-offset: 2px; }
   .frame-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.45rem 0 0; }
+  .boxes { position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; }
+  .box { position: absolute; border: 3px solid #16a34a; box-sizing: border-box; }
 </style>
 </head>
 <body>
@@ -72,19 +101,58 @@ PAGE = """<!DOCTYPE html>
   <h2>Ask a camera</h2>
   <p class="meta">This computer reads the camera index over MCP, then answers from those captions.</p>
   <label class="meta">Camera <select id="camera"></select></label>
-  <label class="meta" for="indexing"><input type="checkbox" id="indexing"> Indexing</label>
+  <div class="switches">
+    <label class="meta" for="indexing"><input type="checkbox" id="indexing"> GPT indexing</label>
+    <label class="meta" for="jev"><input type="checkbox" id="jev"> JEV indexing</label>
+    <p class="meta">JEV indexing runs on the camera. The camera calls TypeSafe. This computer does not.</p>
+  </div>
   <div id="transcript"></div>
   <form class="query" id="query-form">
     <input id="question" autocomplete="off" placeholder="How long ago was a hand in the frame, and for how long?">
     <button type="submit">Ask</button>
   </form>
 </section>
+<section class="card" id="nouls">
+  <h2>JEV nouls</h2>
+  <p class="meta">Yes/no questions for the camera. Example photos, box colors, and an optional Slack webhook are stored on the camera. This page does not call TypeSafe.</p>
+  <p class="meta">For a pipette demo, add one noul for a tip on the pipettor and one for a bent tip. Each noul has its own Yes examples and No examples. The box is drawn on the live view when the camera answers yes.</p>
+  <div id="noul-list"></div>
+  <div class="row">
+    <button type="button" id="noul-add" class="small">Add noul</button>
+    <button type="button" id="noul-save" class="small">Save to camera</button>
+  </div>
+  <p class="meta" id="noul-status"></p>
+</section>
 <div id="list"></div>
 <script>
 const transcript = [];
 let indexingBusy = false;
+let jevBusy = false;
+let noulDraft = [];
+let noulCamera = null;
 const liveCards = new Map();
 const pausedCameras = new Set();
+
+function cameraId() {
+  return document.getElementById("camera").value;
+}
+
+function drawBox(box) {
+  const el = document.createElement("div");
+  el.className = "box";
+  const top = Number(box.top);
+  const left = Number(box.left);
+  const right = Number(box.right);
+  const bottom = Number(box.bottom);
+  if (![top, left, right, bottom].every((value) => Number.isFinite(value))) return el;
+  el.style.top = (top * 100) + "%";
+  el.style.left = (left * 100) + "%";
+  el.style.width = ((right - left) * 100) + "%";
+  el.style.height = ((bottom - top) * 100) + "%";
+  el.style.borderColor = /^#[0-9a-fA-F]{6}$/.test(box.color || "") ? box.color : "#16a34a";
+  if (box.label) el.title = box.label;
+  return el;
+}
 
 async function syncIndexing(camera) {
   const box = document.getElementById("indexing");
@@ -125,8 +193,356 @@ document.getElementById("indexing").addEventListener("change", async (event) => 
   indexingBusy = false;
 });
 
+async function syncJev(camera) {
+  const box = document.getElementById("jev");
+  if (!camera) {
+    box.checked = false;
+    box.disabled = true;
+    return;
+  }
+  box.disabled = false;
+  if (jevBusy) return;
+  const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/jev");
+  if (!res.ok) return;
+  const data = await res.json().catch(() => null);
+  if (!data || jevBusy) return;
+  box.checked = !!data.enabled;
+}
+
+document.getElementById("jev").addEventListener("change", async (event) => {
+  const camera = cameraId();
+  const box = event.target;
+  if (!camera) {
+    box.checked = false;
+    return;
+  }
+  jevBusy = true;
+  const enabled = box.checked;
+  try {
+    const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/jev", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({enabled}),
+    });
+    const data = await res.json().catch(() => ({}));
+    box.checked = res.ok ? !!data.enabled : !enabled;
+  } catch (err) {
+    box.checked = !enabled;
+  }
+  jevBusy = false;
+});
+
+function slug(text) {
+  const made = text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32);
+  return made && /^[a-z0-9]/.test(made) ? made : "noul";
+}
+
+function blankNoul() {
+  return {
+    name: "",
+    label: "",
+    instructions: "",
+    examples: [],
+    box: {enabled: false, color: "#16a34a", instructions: ""},
+    alert: {when: "yes", url: ""},
+  };
+}
+
+function normalizeNoul(item) {
+  const box = item.box || {};
+  const alert = item.alert || {};
+  return {
+    name: item.name || "",
+    label: item.label || "",
+    instructions: item.instructions || "",
+    examples: Array.isArray(item.examples) ? item.examples.filter((example) => example && example.id).map((example) => ({
+      id: String(example.id),
+      polarity: example.polarity === "no" ? "no" : "yes",
+    })) : [],
+    box: {
+      enabled: !!box.enabled,
+      color: /^#[0-9a-fA-F]{6}$/.test(box.color || "") ? box.color : "#16a34a",
+      instructions: box.instructions || "",
+    },
+    alert: {when: alert.when === "no" ? "no" : "yes", url: alert.url || ""},
+  };
+}
+
+function setNoulStatus(text) {
+  document.getElementById("noul-status").textContent = text;
+}
+
+function collectNouls() {
+  document.querySelectorAll("[data-noul]").forEach((node) => {
+    const item = noulDraft[Number(node.dataset.noul)];
+    if (!item) return;
+    item.label = node.querySelector(".noul-label").value.trim();
+    item.name = node.querySelector(".noul-name").value.trim();
+    item.instructions = node.querySelector(".noul-instructions").value.trim();
+    item.box.enabled = node.querySelector(".noul-box").checked;
+    item.box.color = node.querySelector(".noul-color").value;
+    item.box.instructions = node.querySelector(".noul-box-instructions").value.trim();
+    item.alert.when = node.querySelector(".noul-when").value;
+    item.alert.url = node.querySelector(".noul-url").value.trim();
+  });
+}
+
+function field(labelText, control) {
+  const label = document.createElement("label");
+  label.className = "stack";
+  label.append(document.createTextNode(labelText), control);
+  return label;
+}
+
+function renderNouls() {
+  const list = document.getElementById("noul-list");
+  const camera = cameraId();
+  list.replaceChildren(...noulDraft.map((item, index) => {
+    const block = document.createElement("div");
+    block.className = "noul";
+    block.dataset.noul = String(index);
+    const label = document.createElement("input");
+    label.className = "noul-label";
+    label.value = item.label;
+    label.placeholder = "pipette tip bent";
+    const name = document.createElement("input");
+    name.className = "noul-name";
+    name.value = item.name;
+    name.placeholder = "tip_bent";
+    const instructions = document.createElement("textarea");
+    instructions.className = "noul-instructions";
+    instructions.value = item.instructions;
+    instructions.placeholder = "Is the pipette tip bent in `photo`?";
+    const examplePair = document.createElement("div");
+    examplePair.className = "example-pair";
+    examplePair.append(
+      exampleSide(index, "yes", item, camera),
+      exampleSide(index, "no", item, camera),
+    );
+    const boxOn = document.createElement("input");
+    boxOn.type = "checkbox";
+    boxOn.className = "noul-box";
+    boxOn.checked = !!item.box.enabled;
+    const color = document.createElement("input");
+    color.type = "color";
+    color.className = "noul-color";
+    color.value = item.box.color;
+    const boxInstructions = document.createElement("input");
+    boxInstructions.className = "noul-box-instructions";
+    boxInstructions.value = item.box.instructions;
+    boxInstructions.placeholder = "the pipette tip in `photo`";
+    const when = document.createElement("select");
+    when.className = "noul-when";
+    ["yes", "no"].forEach((side) => {
+      const option = document.createElement("option");
+      option.value = side;
+      option.textContent = "Alert on " + side;
+      if (item.alert.when === side) option.selected = true;
+      when.append(option);
+    });
+    const url = document.createElement("input");
+    url.type = "url";
+    url.className = "noul-url";
+    url.value = item.alert.url;
+    url.placeholder = "https://hooks.slack.com/services/...";
+    url.autocomplete = "off";
+    const removeNoul = document.createElement("button");
+    removeNoul.type = "button";
+    removeNoul.className = "small";
+    removeNoul.textContent = "Remove noul";
+    removeNoul.addEventListener("click", () => {
+      collectNouls();
+      noulDraft.splice(index, 1);
+      renderNouls();
+    });
+    const boxRow = document.createElement("div");
+    boxRow.className = "row";
+    const boxLabel = document.createElement("label");
+    boxLabel.className = "meta";
+    boxLabel.append(boxOn, document.createTextNode(" Bounding box"));
+    boxRow.append(boxLabel, color);
+    block.append(
+      field("Label", label),
+      field("Name", name),
+      field("Yes/no question", instructions),
+      examplePair,
+      boxRow,
+      field("What to outline", boxInstructions),
+      field("Slack webhook, optional", url),
+      when,
+      removeNoul,
+    );
+    return block;
+  }));
+}
+
+function exampleSide(index, polarity, item, camera) {
+  const side = document.createElement("div");
+  side.className = "example-side " + polarity;
+  const heading = document.createElement("h3");
+  heading.textContent = polarity === "yes" ? "Yes examples" : "No examples";
+  const note = document.createElement("p");
+  note.className = "meta";
+  note.textContent = polarity === "yes" ? "A photo where the answer is yes." : "A photo where the answer is no.";
+  const figures = document.createElement("div");
+  figures.className = "examples";
+  item.examples.forEach((example, exampleIndex) => {
+    if (example.polarity !== polarity) return;
+    const figure = document.createElement("figure");
+    const img = document.createElement("img");
+    img.alt = polarity + " example";
+    if (camera && item.name && example.id) {
+      img.src = "/api/cameras/" + encodeURIComponent(camera) + "/nouls/" + encodeURIComponent(item.name) + "/examples/" + encodeURIComponent(example.id);
+    }
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "small";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => {
+      collectNouls();
+      noulDraft[index].examples.splice(exampleIndex, 1);
+      renderNouls();
+    });
+    figure.append(img, remove);
+    figures.append(figure);
+  });
+  const file = document.createElement("input");
+  file.type = "file";
+  file.accept = "image/*";
+  const upload = document.createElement("button");
+  upload.type = "button";
+  upload.className = "small";
+  upload.textContent = polarity === "yes" ? "Upload yes" : "Upload no";
+  upload.addEventListener("click", () => uploadExample(index, file, polarity));
+  side.append(heading, note, figures, file, upload);
+  return side;
+}
+
+function nextExampleId(examples, polarity) {
+  const used = new Set(examples.map((example) => example.id));
+  let number = 1;
+  let id = polarity + String(number);
+  while (used.has(id)) {
+    number += 1;
+    id = polarity + String(number);
+  }
+  return id;
+}
+
+async function uploadExample(index, file, polarity) {
+  collectNouls();
+  const camera = cameraId();
+  const item = noulDraft[index];
+  if (!camera || !item) return;
+  if (!item.name) item.name = slug(item.label);
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(item.name)) {
+    setNoulStatus("Give the noul a short name before uploading an example.");
+    renderNouls();
+    return;
+  }
+  if (!file.files || !file.files[0]) {
+    setNoulStatus("Choose an example image first.");
+    return;
+  }
+  if (item.examples.length >= 4) {
+    setNoulStatus("A noul can have 4 examples.");
+    return;
+  }
+  const id = nextExampleId(item.examples, polarity === "no" ? "no" : "yes");
+  setNoulStatus("Uploading example to the camera.");
+  try {
+    const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/nouls/" + encodeURIComponent(item.name) + "/examples/" + encodeURIComponent(id), {
+      method: "PUT",
+      headers: {"Content-Type": file.files[0].type || "application/octet-stream"},
+      body: file.files[0],
+    });
+    if (!res.ok) {
+      setNoulStatus("Example upload failed.");
+      return;
+    }
+    item.examples.push({id, polarity: polarity === "no" ? "no" : "yes"});
+    setNoulStatus("Example stored on the camera. Save the noul to keep it in the question.");
+    renderNouls();
+  } catch (err) {
+    setNoulStatus("Example upload failed.");
+  }
+}
+
+async function saveNouls() {
+  const camera = cameraId();
+  if (!camera) return;
+  collectNouls();
+  const payload = noulDraft.map((item) => ({
+    name: item.name || slug(item.label),
+    label: item.label,
+    instructions: item.instructions,
+    examples: item.examples.map((example) => ({id: example.id, polarity: example.polarity})),
+    box: {
+      enabled: !!item.box.enabled,
+      color: item.box.color,
+      instructions: item.box.instructions,
+    },
+    alert: {when: item.alert.when === "no" ? "no" : "yes", url: item.alert.url},
+  }));
+  setNoulStatus("Saving nouls to the camera.");
+  try {
+    const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/nouls", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      setNoulStatus(text.includes("https://") ? "Could not save nouls." : (text.trim().slice(0, 200) || "Could not save nouls."));
+      return;
+    }
+    noulCamera = null;
+    await loadNouls(camera);
+    setNoulStatus("Saved " + noulDraft.length + " noul" + (noulDraft.length === 1 ? "" : "s") + " on the camera.");
+  } catch (err) {
+    setNoulStatus("Could not save nouls.");
+  }
+}
+
+async function loadNouls(camera) {
+  if (camera === noulCamera) return;
+  noulCamera = camera;
+  if (!camera) {
+    noulDraft = [];
+    renderNouls();
+    return;
+  }
+  try {
+    const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/nouls");
+    if (!res.ok) {
+      noulDraft = [];
+      renderNouls();
+      return;
+    }
+    const data = await res.json().catch(() => []);
+    noulDraft = Array.isArray(data) ? data.map(normalizeNoul) : [];
+  } catch (err) {
+    noulDraft = [];
+  }
+  renderNouls();
+}
+
+document.getElementById("noul-add").addEventListener("click", () => {
+  collectNouls();
+  noulDraft.push(blankNoul());
+  renderNouls();
+});
+
+document.getElementById("noul-save").addEventListener("click", () => {
+  saveNouls();
+});
+
 document.getElementById("camera").addEventListener("change", () => {
-  syncIndexing(document.getElementById("camera").value);
+  const camera = cameraId();
+  syncIndexing(camera);
+  syncJev(camera);
+  noulCamera = null;
+  loadNouls(camera);
 });
 
 function syncCameras(cameras) {
@@ -227,7 +643,9 @@ function ensureCard(cam) {
   frame.className = "frame";
   const img = document.createElement("img");
   img.alt = "Live view from " + cam.id;
-  frame.append(img);
+  const boxes = document.createElement("div");
+  boxes.className = "boxes";
+  frame.append(img, boxes);
   const controls = document.createElement("div");
   controls.className = "frame-controls";
   const pauseBtn = document.createElement("button");
@@ -247,7 +665,7 @@ function ensureCard(cam) {
   err.className = "err";
   section.append(title, meta, frame, controls, caption, err);
   card = {
-    section, meta, frame, img, caption, err, pauseBtn,
+    section, meta, frame, img, boxes, caption, err, pauseBtn,
     loadToken: 0, frameBlob: null, objectUrl: null,
   };
   liveCards.set(cam.id, card);
@@ -259,9 +677,15 @@ function updateCaption(card, camera) {
   fetch("/api/cameras/" + encodeURIComponent(camera) + "/caption")
     .then((res) => res.status === 200 ? res.json() : null)
     .then((row) => {
-      if (!row || !row.caption || pausedCameras.has(camera)) return;
-      const objects = Array.isArray(row.objects) && row.objects.length ? " (" + row.objects.join(", ") + ")" : "";
-      card.caption.textContent = (row.t || "") + " — " + row.caption + objects;
+      if (!row || pausedCameras.has(camera)) return;
+      if (row.caption) {
+        const objects = Array.isArray(row.objects) && row.objects.length ? " (" + row.objects.join(", ") + ")" : "";
+        card.caption.textContent = (row.t || "") + " — " + row.caption + objects;
+      } else if (row.t && row.watch && typeof row.watch === "object") {
+        const parts = Object.keys(row.watch).map((label) => label + " " + Number(row.watch[label]).toFixed(2));
+        if (parts.length) card.caption.textContent = row.t + " — " + parts.join(", ");
+      }
+      card.boxes.replaceChildren(...(Array.isArray(row.boxes) ? row.boxes : []).map(drawBox));
     })
     .catch(() => {});
 }
@@ -295,6 +719,8 @@ async function load() {
     hint.textContent = "Waiting for a camera to POST /api/register.";
     syncCameras([]);
     syncIndexing("");
+    syncJev("");
+    loadNouls("");
     for (const card of liveCards.values()) {
       if (card.objectUrl) URL.revokeObjectURL(card.objectUrl);
     }
@@ -305,7 +731,9 @@ async function load() {
   }
   hint.textContent = data.cameras.length + " camera" + (data.cameras.length === 1 ? "" : "s") + " on the LAN.";
   syncCameras(data.cameras);
-  syncIndexing(document.getElementById("camera").value);
+  syncIndexing(cameraId());
+  syncJev(cameraId());
+  loadNouls(cameraId());
   const stamp = Date.now();
   const seen = new Set();
   const cards = data.cameras.map((cam) => {
@@ -452,6 +880,41 @@ def fetch_frame(ip: str) -> tuple[int, bytes, str]:
     return fetch_authed(ip, FRAME_PATH, 2_000_000)
 
 
+def shrink_jpeg(data: bytes) -> bytes:
+    image = Image.open(BytesIO(data))
+    image = image.convert("RGB")
+    image.thumbnail((320, 320))
+    raw = b""
+    quality = 85
+    while quality >= 40:
+        buf = BytesIO()
+        image.save(buf, format="JPEG", quality=quality)
+        raw = buf.getvalue()
+        if len(raw) <= EXAMPLE_MAX_BYTES:
+            return raw
+        quality -= 15
+    raise ValueError("example image is still over 80KB")
+
+
+def put_authed(ip: str, path: str, data: bytes, content_type: str, limit: int) -> tuple[int, bytes, str]:
+    password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    if not password:
+        return 503, b"WITNESS_CAMERA_PASSWORD is not set\n", "text/plain"
+    req = urllib.request.Request(f"http://{ip}{path}", data=data, method="PUT")
+    req.add_header("Authorization", "Bearer " + password)
+    req.add_header("Content-Type", content_type)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return resp.status, resp.read(limit), resp.headers.get("Content-Type", "application/octet-stream")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(400)
+        if b"https://" in detail:
+            detail = b"camera rejected the noul\n"
+        return exc.code, detail or f"camera returned HTTP {exc.code}\n".encode(), "text/plain"
+    except Exception as exc:
+        return 502, f"camera unreachable: {exc.__class__.__name__}\n".encode(), "text/plain"
+
+
 def post_authed(ip: str, path: str, payload: dict) -> tuple[int, bytes, str]:
     password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
     if not password:
@@ -544,6 +1007,7 @@ def index_records(text: str) -> tuple[list[dict], bool]:
                 "objects": row.get("objects") or [],
                 "actions": row.get("actions") or [],
                 "motion": row.get("motion"),
+                "watch": row.get("watch") if isinstance(row.get("watch"), dict) else {},
             }
         )
     rows.sort(key=lambda row: str(row["t"]))
@@ -570,6 +1034,9 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
         "When asked how long something was in frame, the duration is only the span from the earliest "
         "keyframe that shows it to the latest keyframe that shows it. The next keyframe that does not "
         "show it is an upper bound on when it left, not extra time it was visible.\n"
+        "The watch field holds on-camera JEV yes-probabilities from 0 to 1. "
+        "A value of 0.5 or higher means yes. Use those scores the same way as captions "
+        "when deciding when something was present or absent.\n"
         "If the index does not mention it, say so. Do not invent events.\n"
         "Answer in a few plain sentences. Do not use markdown.\n\n"
         f"{note}Question: {question}\n\n"
@@ -668,6 +1135,16 @@ def make_handler(registry: Registry):
             if path.startswith(prefix) and path.endswith("/indexing"):
                 self._indexing_get(path[len(prefix) : -len("/indexing")])
                 return
+            if path.startswith(prefix) and path.endswith("/jev"):
+                self._jev_get(path[len(prefix) : -len("/jev")])
+                return
+            example = EXAMPLE_RE.match(path)
+            if example:
+                self._example_get(example.group("camera"), example.group("name"), example.group("example"))
+                return
+            if path.startswith(prefix) and path.endswith("/nouls"):
+                self._nouls_get(path[len(prefix) : -len("/nouls")])
+                return
             self._send(404, b"not found\n", "text/plain")
 
         def do_POST(self) -> None:
@@ -678,6 +1155,9 @@ def make_handler(registry: Registry):
                 return
             if path.startswith(prefix) and path.endswith("/indexing"):
                 self._indexing_post(path[len(prefix) : -len("/indexing")])
+                return
+            if path.startswith(prefix) and path.endswith("/jev"):
+                self._jev_post(path[len(prefix) : -len("/jev")])
                 return
             if path != "/api/register":
                 self._send(404, b"not found\n", "text/plain")
@@ -742,6 +1222,110 @@ def make_handler(registry: Registry):
                 return
             status, raw, ctype = post_authed(camera["ip"], "/api/v1/indexing", {"enabled": enabled})
             self._send(status, raw, ctype if status == 200 else "text/plain")
+
+        def _jev_get(self, camera_id: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._json(404, {"error": "unknown camera"})
+                return
+            status, body, ctype = fetch_authed(camera["ip"], "/api/v1/jev", 8192)
+            self._send(status, body, ctype if status == 200 else "text/plain")
+
+        def _jev_post(self, camera_id: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._json(404, {"error": "unknown camera"})
+                return
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > 256:
+                self._json(400, {"error": "body must be 1 to 256 bytes"})
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+            except json.JSONDecodeError:
+                self._json(400, {"error": "invalid json"})
+                return
+            enabled = body.get("enabled") if isinstance(body, dict) else None
+            if not isinstance(enabled, bool):
+                self._json(400, {"error": "enabled must be a boolean"})
+                return
+            status, raw, ctype = post_authed(camera["ip"], "/api/v1/jev", {"enabled": enabled})
+            self._send(status, raw, ctype if status == 200 else "text/plain")
+
+        def _nouls_get(self, camera_id: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._json(404, {"error": "unknown camera"})
+                return
+            status, body, ctype = fetch_authed(camera["ip"], "/api/v1/nouls", 65536)
+            self._send(status, body, ctype if status == 200 else "text/plain")
+
+        def _example_get(self, camera_id: str, name: str, example: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._send(404, b"unknown camera\n", "text/plain")
+                return
+            status, body, ctype = fetch_authed(
+                camera["ip"], f"/api/v1/nouls/{name}/examples/{example}", EXAMPLE_MAX_BYTES + 1024
+            )
+            self._send(status, body, ctype if status == 200 else "text/plain")
+
+        def do_PUT(self) -> None:
+            path = urlparse(self.path).path
+            example = EXAMPLE_RE.match(path)
+            if example:
+                self._example_put(example.group("camera"), example.group("name"), example.group("example"))
+                return
+            prefix = "/api/cameras/"
+            if path.startswith(prefix) and path.endswith("/nouls"):
+                self._nouls_put(path[len(prefix) : -len("/nouls")])
+                return
+            self._send(404, b"not found\n", "text/plain")
+
+        def _nouls_put(self, camera_id: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._json(404, {"error": "unknown camera"})
+                return
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > 65536:
+                self._json(400, {"error": "body must be 1 to 65536 bytes"})
+                return
+            raw = self.rfile.read(length)
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                self._json(400, {"error": "invalid json"})
+                return
+            if not isinstance(parsed, list):
+                self._json(400, {"error": "json array required"})
+                return
+            status, body, ctype = put_authed(camera["ip"], "/api/v1/nouls", raw, "application/json", 4096)
+            self._send(status, body, ctype if status == 200 else "text/plain")
+
+        def _example_put(self, camera_id: str, name: str, example: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._send(404, b"unknown camera\n", "text/plain")
+                return
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > UPLOAD_MAX_BYTES:
+                self._send(400, b"example image is too large\n", "text/plain")
+                return
+            raw = self.rfile.read(length)
+            try:
+                jpeg = shrink_jpeg(raw)
+            except Exception:
+                self._send(400, b"example image could not be prepared\n", "text/plain")
+                return
+            status, body, ctype = put_authed(
+                camera["ip"],
+                f"/api/v1/nouls/{name}/examples/{example}",
+                jpeg,
+                "image/jpeg",
+                4096,
+            )
+            self._send(status, body, ctype if status == 200 else "text/plain")
 
         def _query(self, camera_id: str) -> None:
             camera = registry.get(camera_id)
@@ -816,7 +1400,15 @@ def run_check() -> int:
             raise SystemExit("camera missing from list")
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=3) as resp:
             page = resp.read().decode()
-        if "Witness registrar" not in page or "/caption" not in page or "Ask a camera" not in page or "Indexing" not in page:
+        if (
+            "Witness registrar" not in page
+            or "/caption" not in page
+            or "Ask a camera" not in page
+            or "GPT indexing" not in page
+            or "JEV indexing" not in page
+            or "JEV nouls" not in page
+            or "runs on the camera" not in page
+        ):
             raise SystemExit("page missing title")
         query_missing = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/cameras/no-such/query",
@@ -878,6 +1470,28 @@ def run_check() -> int:
                 raise SystemExit(f"unexpected indexing status {exc.code}")
         else:
             raise SystemExit("indexing fetch should fail without a camera")
+        for missing in (
+            f"http://127.0.0.1:{port}/api/cameras/no-such/jev",
+            f"http://127.0.0.1:{port}/api/cameras/no-such/nouls",
+            f"http://127.0.0.1:{port}/api/cameras/no-such/nouls/tip/examples/yes1",
+        ):
+            try:
+                urllib.request.urlopen(missing, timeout=3)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise SystemExit(f"unexpected missing-camera status {exc.code} for {missing}")
+            else:
+                raise SystemExit(f"unknown camera should be 404 for {missing}")
+        jev_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/jev"
+        nouls_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/nouls"
+        for url, label in ((jev_url, "jev"), (nouls_url, "nouls")):
+            try:
+                urllib.request.urlopen(url, timeout=3)
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (502, 503):
+                    raise SystemExit(f"unexpected {label} status {exc.code}")
+            else:
+                raise SystemExit(f"{label} fetch should fail without a camera")
     finally:
         httpd.shutdown()
         check_file = RUN / "cameras-check.json"

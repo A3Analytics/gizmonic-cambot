@@ -8,7 +8,7 @@ The registrar chat is a separate branch, `registrar-chat`. Both branches edit `f
 
 The recorder on core-unpinned task `recorder` grabs a QVGA JPEG, copies it to PSRAM, and appends it to `/sdcard/witness/rec/…`. The 18-byte frame index stores motion as 0. Nothing writes `/sdcard/witness/index/` or `/sdcard/witness/events/`.
 
-`witness_llm_openai`, `witness_llm_anthropic`, and `witness_llm_jev` can POST one JPEG and receive a body. Boot only prints whether each key was compiled in. The JEV call is one image and one question. The host sends up to four images and a set of questions.
+`witness_llm_openai`, `witness_llm_anthropic`, and `witness_llm_jev` can POST one JPEG and receive a body. Boot only prints whether each key was compiled in. GPT captions and JEV nouls are separate switches. JEV indexing runs on the camera: one System One request per keyframe, with the live frame, any example images, every noul, and an optional box question. The registrar stores that configuration and draws the results. It does not call TypeSafe.
 
 `jev_api_key.txt` and `openai_api_key.txt` stay gitignored. Copy them into `firmware/main/secrets.h` as `WITNESS_JEV_KEY` and `WITNESS_MODEL_KEY` when building this branch. Never print them.
 
@@ -31,19 +31,25 @@ Match `Indexer` in `host/witness_index/pipeline.py`.
 
 1. Motion: grayscale, shrink to one eighth, mean absolute change, 0 to 1. Store thousandths in the existing motion field instead of 0.
 2. Keyframe: first frame, then every 3 seconds while motion stays above 0.05, otherwise every 60 seconds. Robot marks come later.
-3. Batch up to four keyframes. Caption each with `gpt-4.1-mini` into caption, objects, actions, and robot state. Send the batch to JEV `jev-1.14.0` when a watch list is present.
+3. Batch up to four keyframes. When GPT indexing is on, caption each with `gpt-4.1-mini` into caption, objects, actions, and robot state. When JEV indexing is on, send that keyframe to JEV `jev-1.14.0` with the nouls stored on the card. Either switch can be on alone.
 4. Append one JSON line per keyframe under `/sdcard/witness/index/YYYY-MM-DD/HH.jsonl`, with the same fields as the host record.
 5. Merge events into `/sdcard/witness/events/YYYY-MM-DD.jsonl`.
 6. The daily budget pauses the indexer only. Recording continues.
 7. A dropped caption still keeps a JEV score when one came back.
 
-The watch list is a file on the card, not a list invented in firmware. The scene profile is “General camera setup. Testing basic functionality.” An empty list means captions run and `watch` is `{}`.
+The nouls are a file on the card, `nouls.json`, plus example JPEGs under `nouls/<name>/`. The camera does not invent them. The scene profile is “General camera setup. Testing basic functionality.” An empty list means a JEV call is skipped and `watch` is `{}`. A missing `nouls.json` still reads the older `watch.json` list of name, instructions, and label.
+
+Each noul is a yes/no question. Up to four example images can be attached, each marked yes or no, and the camera names them in the instructions (`A yes looks like ex_00`). An optional box question is sent in the same request. The answer is four edges as fractions of the frame. A box is always a rectangle, so the camera keeps it on the index line only when that noul’s yes-probability is at least 0.5, and stores the color chosen in the registrar. An optional alert is an `https` webhook. The camera POSTs `{"text":"..."}` when the answer crosses into the chosen yes or no, then waits until the answer leaves that state. The webhook URL is not printed.
+
+`GET/POST /api/v1/indexing` is GPT indexing. `GET/POST /api/v1/jev` is JEV indexing. `GET/PUT /api/v1/nouls` stores the questions. Example JPEGs are `PUT` and `GET` at `/api/v1/nouls/<name>/examples/<id>` and are refused above 80KB.
 
 ## Registrar
 
 Add `GET /api/v1/index/latest` on the camera. It returns the newest index record as JSON, with bearer auth, and no image body.
 
-The registrar proxies that for each registered camera, the same way it proxies `frame.jpg`, using `WITNESS_CAMERA_PASSWORD` and never printing it. The card under the live frame shows the caption, the time, and the objects. An empty index shows nothing in that slot.
+The registrar proxies that for each registered camera, the same way it proxies `frame.jpg`, using `WITNESS_CAMERA_PASSWORD` and never printing it. The card under the live frame shows the caption, the time, and the objects. An empty index shows nothing in that slot. Boxes from the latest index line are drawn on the live image in the color stored with the noul.
+
+The registrar has a JEV nouls section. It uploads example images, after shrinking them, and saves the questions onto the camera. The JEV checkbox says the camera calls TypeSafe. Ask keeps `watch` scores in the prompt it sends to gpt-4.1-mini, so a question about when a noul was yes or no can be answered with GPT indexing off. Webhook URLs are not written to the registrar log.
 
 ## Tests
 
@@ -55,7 +61,7 @@ The registrar proxies that for each registered camera, the same way it proxies `
 
 1. Motion and keyframes on the device, still with motion written into the binary index.
 2. One OpenAI caption appended to the card.
-3. JEV scores when the watch list file is non-empty.
+3. JEV scores when JEV indexing is on and the noul file is non-empty.
 4. Registrar shows the latest caption.
 
 Out of this branch: the registrar chat, `POST /api/v1/ask`, live MJPEG, provisioning, and the `witness` CLI.

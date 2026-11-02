@@ -211,8 +211,8 @@ static esp_err_t frame_get(httpd_req_t *req) {
 static void start_http(void) {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = 80;
-    cfg.stack_size = 8192;
-    cfg.max_uri_handlers = 16;
+    cfg.stack_size = 12288;
+    cfg.max_uri_handlers = 24;
     cfg.uri_match_fn = httpd_uri_match_wildcard;
     cfg.lru_purge_enable = true;
     httpd_handle_t server = NULL;

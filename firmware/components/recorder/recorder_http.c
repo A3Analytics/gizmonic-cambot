@@ -8,9 +8,11 @@
 #include <string.h>
 #include <strings.h>
 #include <stdbool.h>
+#include <sys/stat.h>
 
 #include "cJSON.h"
 #include "esp_camera.h"
+#include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "mbedtls/base64.h"
 #include "witness_clock.h"
@@ -475,7 +477,8 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
     if (strcmp(name, "search_index") == 0) {
         const char *query = cJSON_GetStringValue(cJSON_GetObjectItem(arguments, "query"));
         cJSON *rows = cJSON_CreateArray();
-        DIR *days = opendir(WITNESS_ROOT "/index");
+        char *line = malloc(4096);
+        DIR *days = line ? opendir(WITNESS_ROOT "/index") : NULL;
         if (days) {
             struct dirent *day;
             while ((day = readdir(days)) != NULL) {
@@ -500,8 +503,7 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
                     if (!file) {
                         continue;
                     }
-                    char line[512];
-                    while (fgets(line, sizeof line, file)) {
+                    while (fgets(line, 4096, file)) {
                         if (query && query[0] && strcasestr(line, query) == NULL) {
                             continue;
                         }
@@ -516,6 +518,7 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
             }
             closedir(days);
         }
+        free(line);
         char *printed = cJSON_PrintUnformatted(rows);
         cJSON_Delete(rows);
         cJSON *result = tool_result(text_content(printed ? printed : "[]"), false);
@@ -653,13 +656,484 @@ static esp_err_t latest_get(httpd_req_t *req) {
         deny(req);
         return ESP_OK;
     }
-    char body[2048];
-    if (!witness_index_copy_latest(body, sizeof body)) {
+    char *body = malloc(4096);
+    esp_err_t err;
+    if (!body) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not read index");
+        return ESP_OK;
+    }
+    if (!witness_index_copy_latest(body, 4096)) {
+        free(body);
         httpd_resp_set_status(req, "204 No Content");
         return httpd_resp_send(req, "", 0);
     }
     httpd_resp_set_type(req, "application/json");
+    err = httpd_resp_sendstr(req, body);
+    free(body);
+    return err;
+}
+
+static esp_err_t jev_get(httpd_req_t *req) {
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    char body[32];
+    snprintf(body, sizeof body, "{\"enabled\":%s}", witness_jev_enabled() ? "true" : "false");
+    httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, body);
+}
+
+static esp_err_t jev_post(httpd_req_t *req) {
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    char *raw = read_body(req);
+    cJSON *body = raw ? cJSON_Parse(raw) : NULL;
+    free(raw);
+    cJSON *flag = body ? cJSON_GetObjectItem(body, "enabled") : NULL;
+    if (!cJSON_IsBool(flag)) {
+        cJSON_Delete(body);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "enabled must be a boolean");
+        return ESP_OK;
+    }
+    if (!witness_jev_set_enabled(cJSON_IsTrue(flag))) {
+        cJSON_Delete(body);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store jev state");
+        return ESP_OK;
+    }
+    cJSON_Delete(body);
+    char reply[32];
+    snprintf(reply, sizeof reply, "{\"enabled\":%s}", witness_jev_enabled() ? "true" : "false");
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, reply);
+}
+
+static char *read_body_limit(httpd_req_t *req, size_t limit) {
+    char *body;
+    int got = 0;
+    if (req->content_len <= 0 || (size_t)req->content_len > limit) {
+        return NULL;
+    }
+    body = heap_caps_malloc((size_t)req->content_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!body) {
+        body = malloc((size_t)req->content_len + 1);
+    }
+    if (!body) {
+        return NULL;
+    }
+    while (got < req->content_len) {
+        int n = httpd_req_recv(req, body + got, (size_t)req->content_len - (size_t)got);
+        if (n <= 0) {
+            free(body);
+            return NULL;
+        }
+        got += n;
+    }
+    body[got] = '\0';
+    return body;
+}
+
+static int plain_id(const char *text) {
+    size_t length;
+    if (!text || !text[0]) {
+        return 0;
+    }
+    length = strlen(text);
+    if (length > 31) {
+        return 0;
+    }
+    for (size_t i = 0; i < length; i++) {
+        char ch = text[i];
+        if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' ||
+              ch == '-')) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int short_text(const char *text, size_t cap) {
+    return text && text[0] && strlen(text) < cap;
+}
+
+static int hex_color(const char *text) {
+    if (!text || text[0] != '#' || strlen(text) != 7) {
+        return 0;
+    }
+    for (int i = 1; i < 7; i++) {
+        char ch = text[i];
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int https_url(const char *url) {
+    size_t length;
+    if (!url || strncmp(url, "https://", 8) != 0) {
+        return 0;
+    }
+    length = strlen(url);
+    if (length < 12 || length > 299) {
+        return 0;
+    }
+    for (size_t i = 0; i < length; i++) {
+        unsigned char ch = (unsigned char)url[i];
+        if (ch <= ' ' || ch == '"' || ch == '\\') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int names_include(cJSON *array, const char *name) {
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, array) {
+        const char *have = cJSON_GetStringValue(cJSON_GetObjectItem(item, "name"));
+        if (have && strcmp(have, name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static const char *nouls_clean(cJSON *root, cJSON **out) {
+    cJSON *clean;
+    cJSON *item = NULL;
+    *out = NULL;
+    if (!cJSON_IsArray(root)) {
+        return "json array required";
+    }
+    if (cJSON_GetArraySize(root) > 8) {
+        return "too many nouls";
+    }
+    clean = cJSON_CreateArray();
+    if (!clean) {
+        return "could not store nouls";
+    }
+    cJSON_ArrayForEach(item, root) {
+        const char *name;
+        const char *label;
+        const char *instructions;
+        cJSON *copy;
+        cJSON *examples;
+        cJSON *example = NULL;
+        cJSON *copied_examples;
+        cJSON *box;
+        cJSON *alert;
+        const char *url;
+        if (!cJSON_IsObject(item)) {
+            cJSON_Delete(clean);
+            return "each noul must be an object";
+        }
+        name = cJSON_GetStringValue(cJSON_GetObjectItem(item, "name"));
+        label = cJSON_GetStringValue(cJSON_GetObjectItem(item, "label"));
+        instructions = cJSON_GetStringValue(cJSON_GetObjectItem(item, "instructions"));
+        if (!plain_id(name) || !short_text(label, 96) || !short_text(instructions, 240)) {
+            cJSON_Delete(clean);
+            return "noul name, label, and instructions are required";
+        }
+        if (names_include(clean, name)) {
+            cJSON_Delete(clean);
+            return "noul names must be unique";
+        }
+        copy = cJSON_CreateObject();
+        copied_examples = cJSON_CreateArray();
+        cJSON_AddStringToObject(copy, "name", name);
+        cJSON_AddStringToObject(copy, "label", label);
+        cJSON_AddStringToObject(copy, "instructions", instructions);
+        cJSON_AddItemToObject(copy, "examples", copied_examples);
+        examples = cJSON_GetObjectItem(item, "examples");
+        if (examples && !cJSON_IsArray(examples)) {
+            cJSON_Delete(copy);
+            cJSON_Delete(clean);
+            return "examples must be a list";
+        }
+        if (cJSON_IsArray(examples) && cJSON_GetArraySize(examples) > 4) {
+            cJSON_Delete(copy);
+            cJSON_Delete(clean);
+            return "too many examples";
+        }
+        cJSON_ArrayForEach(example, examples) {
+            const char *id = cJSON_GetStringValue(cJSON_GetObjectItem(example, "id"));
+            const char *polarity = cJSON_GetStringValue(cJSON_GetObjectItem(example, "polarity"));
+            cJSON *one;
+            if (!plain_id(id)) {
+                cJSON_Delete(copy);
+                cJSON_Delete(clean);
+                return "example id is invalid";
+            }
+            if (!polarity || (strcmp(polarity, "yes") != 0 && strcmp(polarity, "no") != 0)) {
+                cJSON_Delete(copy);
+                cJSON_Delete(clean);
+                return "example polarity must be yes or no";
+            }
+            one = cJSON_CreateObject();
+            cJSON_AddStringToObject(one, "id", id);
+            cJSON_AddStringToObject(one, "polarity", polarity);
+            cJSON_AddItemToArray(copied_examples, one);
+        }
+        box = cJSON_GetObjectItem(item, "box");
+        if (cJSON_IsObject(box)) {
+            cJSON *enabled = cJSON_GetObjectItem(box, "enabled");
+            const char *color = cJSON_GetStringValue(cJSON_GetObjectItem(box, "color"));
+            const char *box_instructions = cJSON_GetStringValue(cJSON_GetObjectItem(box, "instructions"));
+            cJSON *copied = cJSON_CreateObject();
+            int on = cJSON_IsTrue(enabled);
+            if (box_instructions && strlen(box_instructions) >= 240) {
+                cJSON_Delete(copied);
+                cJSON_Delete(copy);
+                cJSON_Delete(clean);
+                return "box instructions are too long";
+            }
+            if (on && !short_text(box_instructions, 240)) {
+                cJSON_Delete(copied);
+                cJSON_Delete(copy);
+                cJSON_Delete(clean);
+                return "box instructions are required";
+            }
+            cJSON_AddBoolToObject(copied, "enabled", on);
+            cJSON_AddStringToObject(copied, "color", hex_color(color) ? color : "#16a34a");
+            cJSON_AddStringToObject(copied, "instructions", box_instructions ? box_instructions : "");
+            cJSON_AddItemToObject(copy, "box", copied);
+        }
+        alert = cJSON_GetObjectItem(item, "alert");
+        url = cJSON_IsObject(alert) ? cJSON_GetStringValue(cJSON_GetObjectItem(alert, "url")) : NULL;
+        if (url && url[0]) {
+            const char *when = cJSON_GetStringValue(cJSON_GetObjectItem(alert, "when"));
+            cJSON *copied;
+            if (!https_url(url)) {
+                cJSON_Delete(copy);
+                cJSON_Delete(clean);
+                return "alert url must be https";
+            }
+            if (when && strcmp(when, "yes") != 0 && strcmp(when, "no") != 0) {
+                cJSON_Delete(copy);
+                cJSON_Delete(clean);
+                return "alert when must be yes or no";
+            }
+            copied = cJSON_CreateObject();
+            cJSON_AddStringToObject(copied, "when", when && strcmp(when, "no") == 0 ? "no" : "yes");
+            cJSON_AddStringToObject(copied, "url", url);
+            cJSON_AddItemToObject(copy, "alert", copied);
+        }
+        cJSON_AddItemToArray(clean, copy);
+    }
+    *out = clean;
+    return NULL;
+}
+
+static esp_err_t nouls_get(httpd_req_t *req) {
+    FILE *file;
+    char *raw;
+    size_t got;
+    esp_err_t err;
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    file = fopen(WITNESS_NOULS_JSON, "rb");
+    if (!file) {
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_sendstr(req, "[]");
+    }
+    raw = malloc(32769);
+    if (!raw) {
+        fclose(file);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not read nouls");
+        return ESP_OK;
+    }
+    got = fread(raw, 1, 32768, file);
+    fclose(file);
+    raw[got] = '\0';
+    httpd_resp_set_type(req, "application/json");
+    err = httpd_resp_sendstr(req, raw);
+    free(raw);
+    return err;
+}
+
+static esp_err_t nouls_put(httpd_req_t *req) {
+    char *raw;
+    cJSON *body;
+    cJSON *clean = NULL;
+    const char *error;
+    char *printed;
+    FILE *file;
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    raw = read_body_limit(req, 32768);
+    body = raw ? cJSON_Parse(raw) : NULL;
+    free(raw);
+    error = body ? nouls_clean(body, &clean) : "invalid json";
+    cJSON_Delete(body);
+    if (error) {
+        cJSON_Delete(clean);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, error);
+        return ESP_OK;
+    }
+    printed = cJSON_PrintUnformatted(clean);
+    cJSON_Delete(clean);
+    if (!printed) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store nouls");
+        return ESP_OK;
+    }
+    mkdir(WITNESS_ROOT, 0775);
+    file = fopen(WITNESS_NOULS_JSON ".tmp", "wb");
+    if (!file || fputs(printed, file) < 0) {
+        if (file) {
+            fclose(file);
+        }
+        free(printed);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store nouls");
+        return ESP_OK;
+    }
+    fclose(file);
+    free(printed);
+    remove(WITNESS_NOULS_JSON);
+    if (rename(WITNESS_NOULS_JSON ".tmp", WITNESS_NOULS_JSON) != 0) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store nouls");
+        return ESP_OK;
+    }
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, "{\"ok\":true}");
+}
+
+static int example_ids(const httpd_req_t *req, char *name, size_t name_cap, char *id, size_t id_cap) {
+    char path[160];
+    const char *query = strchr(req->uri, '?');
+    size_t length = query ? (size_t)(query - req->uri) : strlen(req->uri);
+    const char *prefix = "/api/v1/nouls/";
+    const char *rest;
+    const char *mark;
+    const char *example;
+    size_t name_len;
+    if (length == 0 || length >= sizeof path || strncmp(req->uri, prefix, strlen(prefix)) != 0) {
+        return -1;
+    }
+    memcpy(path, req->uri, length);
+    path[length] = '\0';
+    rest = path + strlen(prefix);
+    mark = strstr(rest, "/examples/");
+    if (!mark || mark == rest) {
+        return -1;
+    }
+    name_len = (size_t)(mark - rest);
+    if (name_len == 0 || name_len >= name_cap) {
+        return -1;
+    }
+    memcpy(name, rest, name_len);
+    name[name_len] = '\0';
+    example = mark + strlen("/examples/");
+    if (!example[0] || strchr(example, '/') || strlen(example) >= id_cap) {
+        return -1;
+    }
+    snprintf(id, id_cap, "%s", example);
+    if (!plain_id(name) || !plain_id(id)) {
+        return -1;
+    }
+    return 0;
+}
+
+static void example_path(const char *name, const char *id, char *path, size_t cap) {
+    snprintf(path, cap, WITNESS_ROOT "/nouls/%s/%s.jpg", name, id);
+}
+
+static esp_err_t noul_example_get(httpd_req_t *req) {
+    char name[32];
+    char id[32];
+    char path[160];
+    FILE *file;
+    long size;
+    char *body;
+    esp_err_t err;
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    if (example_ids(req, name, sizeof name, id, sizeof id) != 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+        return ESP_OK;
+    }
+    example_path(name, id, path, sizeof path);
+    file = fopen(path, "rb");
+    if (!file) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+        return ESP_OK;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not read example");
+        return ESP_OK;
+    }
+    size = ftell(file);
+    if (size <= 0 || (size_t)size > WITNESS_NOUL_JPEG_MAX || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+        return ESP_OK;
+    }
+    body = heap_caps_malloc((size_t)size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!body) {
+        body = malloc((size_t)size);
+    }
+    if (!body || fread(body, 1, (size_t)size, file) != (size_t)size) {
+        free(body);
+        fclose(file);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not read example");
+        return ESP_OK;
+    }
+    fclose(file);
+    httpd_resp_set_type(req, "image/jpeg");
+    err = httpd_resp_send(req, body, (ssize_t)size);
+    free(body);
+    return err;
+}
+
+static esp_err_t noul_example_put(httpd_req_t *req) {
+    char name[32];
+    char id[32];
+    char dir[128];
+    char path[160];
+    char *body;
+    FILE *file;
+    size_t len;
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    if (example_ids(req, name, sizeof name, id, sizeof id) != 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "example path is invalid");
+        return ESP_OK;
+    }
+    body = read_body_limit(req, WITNESS_NOUL_JPEG_MAX);
+    len = body ? (size_t)req->content_len : 0;
+    if (!body || len < 3 || (unsigned char)body[0] != 0xff || (unsigned char)body[1] != 0xd8) {
+        free(body);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "example must be a JPEG under 80KB");
+        return ESP_OK;
+    }
+    mkdir(WITNESS_ROOT, 0775);
+    mkdir(WITNESS_ROOT "/nouls", 0775);
+    snprintf(dir, sizeof dir, WITNESS_ROOT "/nouls/%s", name);
+    mkdir(dir, 0775);
+    example_path(name, id, path, sizeof path);
+    file = fopen(path, "wb");
+    if (!file || fwrite(body, 1, len, file) != len) {
+        if (file) {
+            fclose(file);
+        }
+        free(body);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store example");
+        return ESP_OK;
+    }
+    fclose(file);
+    free(body);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, "{\"ok\":true}");
 }
 
 void witness_http_register(httpd_handle_t server, const char *token) {
@@ -672,6 +1146,12 @@ void witness_http_register(httpd_handle_t server, const char *token) {
         {.uri = "/api/v1/index/latest", .method = HTTP_GET, .handler = latest_get},
         {.uri = "/api/v1/indexing", .method = HTTP_GET, .handler = indexing_get},
         {.uri = "/api/v1/indexing", .method = HTTP_POST, .handler = indexing_post},
+        {.uri = "/api/v1/jev", .method = HTTP_GET, .handler = jev_get},
+        {.uri = "/api/v1/jev", .method = HTTP_POST, .handler = jev_post},
+        {.uri = "/api/v1/nouls", .method = HTTP_GET, .handler = nouls_get},
+        {.uri = "/api/v1/nouls", .method = HTTP_PUT, .handler = nouls_put},
+        {.uri = "/api/v1/nouls/*", .method = HTTP_GET, .handler = noul_example_get},
+        {.uri = "/api/v1/nouls/*", .method = HTTP_PUT, .handler = noul_example_put},
         {.uri = "/mcp", .method = HTTP_POST, .handler = mcp_post},
     };
     for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++) {
