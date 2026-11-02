@@ -58,6 +58,11 @@ PAGE = """<!DOCTYPE html>
   form.query input { flex: 1; }
   #transcript { max-height: 18rem; overflow: auto; }
   #transcript p { margin: 0.4rem 0; }
+  button.small { font: inherit; padding: 0.25rem 0.45rem; }
+  .frame { position: relative; display: inline-block; max-width: 100%; }
+  .frame img { display: block; max-width: 100%; }
+  .frame.paused { outline: 2px solid #a8a29e; outline-offset: 2px; }
+  .frame-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.45rem 0 0; }
 </style>
 </head>
 <body>
@@ -78,6 +83,8 @@ PAGE = """<!DOCTYPE html>
 <script>
 const transcript = [];
 let indexingBusy = false;
+const liveCards = new Map();
+const pausedCameras = new Set();
 
 async function syncIndexing(camera) {
   const box = document.getElementById("indexing");
@@ -170,6 +177,115 @@ document.getElementById("query-form").addEventListener("submit", async (event) =
   renderTranscript();
 });
 
+function frameUrl(camera, stamp) {
+  return "/api/cameras/" + encodeURIComponent(camera) + "/frame.jpg?t=" + stamp;
+}
+
+function setPaused(camera, paused) {
+  if (paused) pausedCameras.add(camera);
+  else pausedCameras.delete(camera);
+  const card = liveCards.get(camera);
+  if (!card) return;
+  card.frame.classList.toggle("paused", paused);
+  card.pauseBtn.textContent = paused ? "Resume" : "Pause";
+}
+
+function downloadFrame(camera) {
+  const card = liveCards.get(camera);
+  if (!card || !card.frameBlob) {
+    if (card) card.err.textContent = "no frame to download yet";
+    return;
+  }
+  const url = URL.createObjectURL(card.frameBlob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = camera + "-" + new Date().toISOString().replace(/[:.]/g, "-") + ".jpg";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function showFrame(card, blob) {
+  if (card.objectUrl) URL.revokeObjectURL(card.objectUrl);
+  card.frameBlob = blob;
+  card.objectUrl = URL.createObjectURL(blob);
+  card.img.src = card.objectUrl;
+}
+
+function ensureCard(cam) {
+  let card = liveCards.get(cam.id);
+  if (card) return card;
+  const section = document.createElement("section");
+  section.className = "card";
+  section.dataset.camera = cam.id;
+  const title = document.createElement("h2");
+  title.textContent = cam.id;
+  const meta = document.createElement("p");
+  meta.className = "meta";
+  const frame = document.createElement("div");
+  frame.className = "frame";
+  const img = document.createElement("img");
+  img.alt = "Live view from " + cam.id;
+  frame.append(img);
+  const controls = document.createElement("div");
+  controls.className = "frame-controls";
+  const pauseBtn = document.createElement("button");
+  pauseBtn.type = "button";
+  pauseBtn.className = "small";
+  pauseBtn.textContent = "Pause";
+  pauseBtn.addEventListener("click", () => setPaused(cam.id, !pausedCameras.has(cam.id)));
+  const downloadBtn = document.createElement("button");
+  downloadBtn.type = "button";
+  downloadBtn.className = "small";
+  downloadBtn.textContent = "Download";
+  downloadBtn.addEventListener("click", () => downloadFrame(cam.id));
+  controls.append(pauseBtn, downloadBtn);
+  const caption = document.createElement("p");
+  caption.className = "meta";
+  const err = document.createElement("p");
+  err.className = "err";
+  section.append(title, meta, frame, controls, caption, err);
+  card = {
+    section, meta, frame, img, caption, err, pauseBtn,
+    loadToken: 0, frameBlob: null, objectUrl: null,
+  };
+  liveCards.set(cam.id, card);
+  return card;
+}
+
+function updateCaption(card, camera) {
+  if (pausedCameras.has(camera)) return;
+  fetch("/api/cameras/" + encodeURIComponent(camera) + "/caption")
+    .then((res) => res.status === 200 ? res.json() : null)
+    .then((row) => {
+      if (!row || !row.caption || pausedCameras.has(camera)) return;
+      const objects = Array.isArray(row.objects) && row.objects.length ? " (" + row.objects.join(", ") + ")" : "";
+      card.caption.textContent = (row.t || "") + " — " + row.caption + objects;
+    })
+    .catch(() => {});
+}
+
+async function refreshFrame(card, camera, stamp) {
+  if (pausedCameras.has(camera)) return;
+  const token = ++card.loadToken;
+  try {
+    const res = await fetch(frameUrl(camera, stamp));
+    if (!res.ok) return;
+    const blob = await res.blob();
+    if (token !== card.loadToken || pausedCameras.has(camera)) return;
+    const url = URL.createObjectURL(blob);
+    const next = new Image();
+    next.onload = () => {
+      URL.revokeObjectURL(url);
+      if (token !== card.loadToken || pausedCameras.has(camera)) return;
+      showFrame(card, blob);
+    };
+    next.onerror = () => URL.revokeObjectURL(url);
+    next.src = url;
+  } catch (err) {}
+}
+
 async function load() {
   const res = await fetch("/api/cameras");
   const data = await res.json();
@@ -179,6 +295,11 @@ async function load() {
     hint.textContent = "Waiting for a camera to POST /api/register.";
     syncCameras([]);
     syncIndexing("");
+    for (const card of liveCards.values()) {
+      if (card.objectUrl) URL.revokeObjectURL(card.objectUrl);
+    }
+    liveCards.clear();
+    pausedCameras.clear();
     list.replaceChildren();
     return;
   }
@@ -186,33 +307,30 @@ async function load() {
   syncCameras(data.cameras);
   syncIndexing(document.getElementById("camera").value);
   const stamp = Date.now();
-  list.replaceChildren(...data.cameras.map((cam) => {
-    const card = document.createElement("section");
-    card.className = "card";
-    const title = document.createElement("h2");
-    title.textContent = cam.id;
-    const meta = document.createElement("p");
-    meta.className = "meta";
-    meta.textContent = cam.ip + " · last seen " + cam.last_seen + (cam.fw ? " · fw " + cam.fw : "");
-    const img = document.createElement("img");
-    img.alt = "Live view from " + cam.id;
-    img.src = "/api/cameras/" + encodeURIComponent(cam.id) + "/frame.jpg?t=" + stamp;
-    const caption = document.createElement("p");
-    caption.className = "meta";
-    fetch("/api/cameras/" + encodeURIComponent(cam.id) + "/caption")
-      .then((res) => res.status === 200 ? res.json() : null)
-      .then((row) => {
-        if (!row || !row.caption) return;
-        const objects = Array.isArray(row.objects) && row.objects.length ? " (" + row.objects.join(", ") + ")" : "";
-        caption.textContent = (row.t || "") + " — " + row.caption + objects;
-      })
-      .catch(() => {});
-    const err = document.createElement("p");
-    err.className = "err";
-    if (cam.last_view_error) err.textContent = cam.last_view_error;
-    card.append(title, meta, img, caption, err);
-    return card;
-  }));
+  const seen = new Set();
+  const cards = data.cameras.map((cam) => {
+    seen.add(cam.id);
+    const card = ensureCard(cam);
+    card.meta.textContent = cam.ip + " · last seen " + cam.last_seen + (cam.fw ? " · fw " + cam.fw : "");
+    card.err.textContent = cam.last_view_error || "";
+    card.frame.classList.toggle("paused", pausedCameras.has(cam.id));
+    card.pauseBtn.textContent = pausedCameras.has(cam.id) ? "Resume" : "Pause";
+    refreshFrame(card, cam.id, stamp);
+    updateCaption(card, cam.id);
+    return card.section;
+  });
+  for (const id of [...liveCards.keys()]) {
+    if (!seen.has(id)) {
+      const gone = liveCards.get(id);
+      if (gone && gone.objectUrl) URL.revokeObjectURL(gone.objectUrl);
+      liveCards.delete(id);
+      pausedCameras.delete(id);
+    }
+  }
+  const same =
+    list.children.length === cards.length &&
+    cards.every((section, index) => list.children[index] === section);
+  if (!same) list.replaceChildren(...cards);
 }
 load();
 setInterval(load, 2000);
