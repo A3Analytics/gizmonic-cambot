@@ -38,6 +38,7 @@ static const char *openai_key = "";
 static const char *jev_key = "";
 static int frames_today;
 static time_t budget_day;
+static volatile bool index_enabled;
 
 static const char *CAPTION_PROMPT =
     "General camera setup. Testing basic functionality.\n"
@@ -47,6 +48,34 @@ static const char *CAPTION_PROMPT =
 void witness_indexer_set_keys(const char *openai, const char *jev) {
     openai_key = openai ? openai : "";
     jev_key = jev ? jev : "";
+}
+
+static void load_enabled(void) {
+    index_enabled = false;
+    FILE *file = fopen(WITNESS_ROOT "/index_enabled", "r");
+    if (!file) {
+        return;
+    }
+    int ch = fgetc(file);
+    fclose(file);
+    index_enabled = ch == '1';
+}
+
+bool witness_indexer_enabled(void) {
+    return index_enabled;
+}
+
+bool witness_indexer_set_enabled(bool enabled) {
+    FILE *file = fopen(WITNESS_ROOT "/index_enabled", "w");
+    if (!file) {
+        return false;
+    }
+    fputc(enabled ? '1' : '0', file);
+    fputc('\n', file);
+    fclose(file);
+    index_enabled = enabled;
+    printf("index=%s\n", enabled ? "started" : "stopped");
+    return true;
 }
 
 bool witness_index_copy_latest(char *dst, size_t cap) {
@@ -392,8 +421,19 @@ static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, b
     (void)have_watch;
 }
 
+static void discard_batch(keyframe_t *batch, int count) {
+    for (int i = 0; i < count; i++) {
+        free(batch[i].jpeg);
+        batch[i].jpeg = NULL;
+    }
+}
+
 static void flush_batch(keyframe_t *batch, int count) {
     if (count <= 0) {
+        return;
+    }
+    if (!index_enabled) {
+        discard_batch(batch, count);
         return;
     }
     if (!budget_allows(count, batch[0].when)) {
@@ -407,18 +447,30 @@ static void flush_batch(keyframe_t *batch, int count) {
     question_t questions[QUESTION_MAX];
     int question_count = load_questions(questions, QUESTION_MAX);
     for (int i = 0; i < count; i++) {
+        if (!index_enabled) {
+            discard_batch(batch + i, count - i);
+            return;
+        }
         cJSON *caption = NULL;
         if (openai_key[0]) {
             char response[3072];
-            for (int attempt = 0; attempt < 4 && !caption; attempt++) {
+            for (int attempt = 0; attempt < 4 && !caption && index_enabled; attempt++) {
                 if (attempt > 0) {
                     vTaskDelay(pdMS_TO_TICKS(3000));
+                }
+                if (!index_enabled) {
+                    break;
                 }
                 if (witness_llm_openai(openai_key, NULL, "gpt-4.1-mini", batch[i].jpeg, batch[i].len, CAPTION_PROMPT,
                                        response, sizeof response) == ESP_OK) {
                     caption = parse_caption(response);
                 }
             }
+        }
+        if (!index_enabled) {
+            cJSON_Delete(caption);
+            discard_batch(batch + i, count - i);
+            return;
         }
         cJSON *watch = cJSON_CreateObject();
         bool have_watch = ask_jev(batch[i].jpeg, batch[i].len, questions, question_count, watch);
@@ -441,7 +493,11 @@ static void indexer_task(void *arg) {
     int count = 0;
     while (1) {
         keyframe_t item;
-        if (xQueueReceive(keyframes, &item, pdMS_TO_TICKS(count > 0 ? 1000 : 1000)) == pdTRUE) {
+        if (xQueueReceive(keyframes, &item, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            if (!index_enabled) {
+                free(item.jpeg);
+                continue;
+            }
             batch[count++] = item;
             if (count >= BATCH) {
                 flush_batch(batch, count);
@@ -456,7 +512,7 @@ static void indexer_task(void *arg) {
 
 void witness_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16_t motion_milli, uint32_t frame,
                             const char *seg) {
-    if (!keyframes || !jpeg || len == 0 || !seg) {
+    if (!index_enabled || !keyframes || !jpeg || len == 0 || !seg) {
         return;
     }
     uint8_t *copy = heap_caps_malloc(len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -478,6 +534,8 @@ void witness_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16
 }
 
 void witness_indexer_start(void) {
+    load_enabled();
+    printf("index=%s\n", index_enabled ? "started" : "stopped");
     latest_lock = xSemaphoreCreateMutex();
     keyframes = xQueueCreate(BATCH, sizeof(keyframe_t));
     if (!keyframes) {

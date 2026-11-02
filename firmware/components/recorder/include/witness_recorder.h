@@ -15,6 +15,8 @@
 esp_err_t witness_recorder_start(SemaphoreHandle_t camera_lock);
 void witness_indexer_start(void);
 void witness_indexer_set_keys(const char *openai_key, const char *jev_key);
+bool witness_indexer_enabled(void);
+bool witness_indexer_set_enabled(bool enabled);
 void witness_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16_t motion_milli, uint32_t frame,
                             const char *seg);
 void witness_http_register(httpd_handle_t server, const char *bearer_token);

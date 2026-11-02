@@ -611,6 +611,43 @@ static esp_err_t mcp_post(httpd_req_t *req) {
     return err;
 }
 
+static esp_err_t indexing_get(httpd_req_t *req) {
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    char body[32];
+    snprintf(body, sizeof body, "{\"enabled\":%s}", witness_indexer_enabled() ? "true" : "false");
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, body);
+}
+
+static esp_err_t indexing_post(httpd_req_t *req) {
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    char *raw = read_body(req);
+    cJSON *body = raw ? cJSON_Parse(raw) : NULL;
+    free(raw);
+    cJSON *flag = body ? cJSON_GetObjectItem(body, "enabled") : NULL;
+    if (!cJSON_IsBool(flag)) {
+        cJSON_Delete(body);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "enabled must be a boolean");
+        return ESP_OK;
+    }
+    if (!witness_indexer_set_enabled(cJSON_IsTrue(flag))) {
+        cJSON_Delete(body);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store indexing state");
+        return ESP_OK;
+    }
+    cJSON_Delete(body);
+    char reply[32];
+    snprintf(reply, sizeof reply, "{\"enabled\":%s}", witness_indexer_enabled() ? "true" : "false");
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, reply);
+}
+
 static esp_err_t latest_get(httpd_req_t *req) {
     if (!authorized(req)) {
         deny(req);
@@ -633,6 +670,8 @@ void witness_http_register(httpd_handle_t server, const char *token) {
         {.uri = "/api/v1/frame/*", .method = HTTP_GET, .handler = frame_at_get},
         {.uri = "/api/v1/clip.mjpg", .method = HTTP_GET, .handler = clip_get},
         {.uri = "/api/v1/index/latest", .method = HTTP_GET, .handler = latest_get},
+        {.uri = "/api/v1/indexing", .method = HTTP_GET, .handler = indexing_get},
+        {.uri = "/api/v1/indexing", .method = HTTP_POST, .handler = indexing_post},
         {.uri = "/mcp", .method = HTTP_POST, .handler = mcp_post},
     };
     for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++) {
