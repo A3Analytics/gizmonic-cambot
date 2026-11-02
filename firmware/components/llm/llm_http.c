@@ -176,3 +176,73 @@ esp_err_t witness_llm_jev(const char *api_key, const uint8_t *jpeg, size_t jpeg_
     }
     return ESP_OK;
 }
+
+esp_err_t witness_llm_jev_post(const char *api_key, const char *body, char *out, size_t out_cap) {
+    char *auth;
+    int status = 0;
+    esp_err_t err;
+    if (!api_key || !api_key[0] || !body || !body[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    auth = malloc(strlen(api_key) + 8);
+    if (!auth) {
+        return ESP_ERR_NO_MEM;
+    }
+    snprintf(auth, strlen(api_key) + 8, "Bearer %s", api_key);
+    err = post_json(WITNESS_JEV_URL, "Authorization", auth, WITNESS_JEV_IMAGES_HEADER, "true", body, out, out_cap,
+                    &status);
+    memset(auth, 0, strlen(api_key) + 8);
+    free(auth);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (status == 401 || status == 403) {
+        ESP_LOGW(TAG, "model=auth provider=jev");
+        return ESP_FAIL;
+    }
+    if (status >= 400) {
+        ESP_LOGW(TAG, "model=dropped provider=jev status=%d", status);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t witness_llm_alert(const char *url, const char *json_body) {
+    esp_http_client_config_t cfg;
+    esp_http_client_handle_t client;
+    int body_len;
+    int status_code = 0;
+    esp_err_t err;
+    if (!url || strncmp(url, "https://", 8) != 0 || !json_body || !json_body[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memset(&cfg, 0, sizeof cfg);
+    cfg.url = url;
+    cfg.method = HTTP_METHOD_POST;
+    cfg.timeout_ms = 5000;
+    cfg.crt_bundle_attach = esp_crt_bundle_attach;
+    client = esp_http_client_init(&cfg);
+    if (!client) {
+        return ESP_FAIL;
+    }
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    body_len = (int)strlen(json_body);
+    err = esp_http_client_open(client, body_len);
+    if (err == ESP_OK && esp_http_client_write(client, json_body, body_len) < 0) {
+        err = ESP_FAIL;
+    }
+    if (err == ESP_OK) {
+        esp_http_client_fetch_headers(client);
+        status_code = esp_http_client_get_status_code(client);
+        esp_http_client_close(client);
+    }
+    esp_http_client_cleanup(client);
+    ESP_LOGI(TAG, "alert_http status=%d", status_code);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (status_code < 200 || status_code >= 300) {
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}

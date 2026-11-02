@@ -14,9 +14,27 @@
 /* Build a JSON request body. Returns the length written, or -1 if it does not fit.
  * b64 is already base64. Prompts are JSON-escaped. The API key is not written. */
 
+typedef struct {
+    const char *key;
+    const char *b64;
+} witness_jev_asset;
+
+typedef struct {
+    const char *name;
+    const char *instructions;
+    int box;
+    const char *box_instructions;
+} witness_jev_question;
+
 int witness_openai_body(char *dst, size_t cap, const char *model, const char *prompt,
                         const char *b64, int max_tokens);
 int witness_anthropic_body(char *dst, size_t cap, const char *model, const char *prompt,
                            const char *b64, int max_tokens);
 int witness_jev_body(char *dst, size_t cap, const char *model, const char *question_name,
                      const char *instructions, const char *b64);
+
+/* One System One request: the keyframe is asset img1, plus example assets and
+ * a noul per question. box adds a "{name}__box" question when non-zero. */
+int witness_jev_request(char *dst, size_t cap, const char *model, const char *photo_b64,
+                        const witness_jev_asset *assets, int asset_count,
+                        const witness_jev_question *questions, int question_count);

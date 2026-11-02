@@ -43,6 +43,7 @@ def test_idx_layout_matches_python_and_c(tmp_path):
             str(llm),
             "test/host/c/test_llm_body.c",
             "firmware/components/llm/llm_body.c",
+            "firmware/components/llm/alert.c",
         ]
     )
     subprocess.check_call([str(llm)])
