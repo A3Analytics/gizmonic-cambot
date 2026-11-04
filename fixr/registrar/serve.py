@@ -48,6 +48,107 @@ EXAMPLE_RE = re.compile(
 EXAMPLE_MAX_BYTES = 80 * 1024
 UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 PORT = 8765
+STALE_AFTER_S = 120
+DEV_IDLE_S = 5 * 60
+DEV_MODE_PATH = RUN / "dev_mode.json"
+
+
+def camera_is_stale(cam: dict, now: datetime | None = None) -> bool:
+    """True when the camera has not registered recently enough to trust."""
+    if not isinstance(cam, dict):
+        return True
+    stamp = cam.get("last_seen")
+    if not isinstance(stamp, str) or not stamp:
+        return True
+    try:
+        seen = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    return (current - seen).total_seconds() > STALE_AFTER_S
+
+
+def load_dev_mode(path: Path = DEV_MODE_PATH) -> bool:
+    if not path.exists():
+        return False
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(payload.get("enabled")) if isinstance(payload, dict) else False
+
+
+def save_dev_mode(enabled: bool, path: Path = DEV_MODE_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"enabled": bool(enabled)}, indent=2) + "\n")
+
+
+def idle_due(last_activity: datetime | None, now: datetime | None = None, idle_s: int = DEV_IDLE_S) -> bool:
+    if last_activity is None:
+        return False
+    current = now or datetime.now(timezone.utc)
+    if last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=timezone.utc)
+    return (current - last_activity).total_seconds() >= idle_s
+
+
+def disable_camera_indexing(ip: str, poster=None) -> None:
+    """Best-effort: turn GPT and JEV indexing off on one camera."""
+    send = poster or post_authed
+    for path in ("/api/v1/indexing", "/api/v1/jev"):
+        try:
+            send(ip, path, {"enabled": False})
+        except Exception:
+            continue
+
+
+def disable_all_indexing(registry: "Registry", poster=None) -> int:
+    stopped = 0
+    for camera in registry.list():
+        ip = camera.get("ip")
+        if not isinstance(ip, str) or not ip:
+            continue
+        disable_camera_indexing(ip, poster=poster)
+        stopped += 1
+    return stopped
+
+
+class DevState:
+    """Persisted Dev mode flag plus last UI activity for the idle watchdog."""
+
+    def __init__(self, path: Path = DEV_MODE_PATH, now: datetime | None = None):
+        self.path = path
+        self._lock = threading.Lock()
+        self.enabled = load_dev_mode(path)
+        self.last_activity = now or datetime.now(timezone.utc)
+
+    def set_enabled(self, enabled: bool) -> bool:
+        with self._lock:
+            self.enabled = bool(enabled)
+            save_dev_mode(self.enabled, self.path)
+            self.last_activity = datetime.now(timezone.utc)
+            return self.enabled
+
+    def touch(self, when: datetime | None = None) -> None:
+        with self._lock:
+            self.last_activity = when or datetime.now(timezone.utc)
+
+    def snapshot(self) -> tuple[bool, datetime]:
+        with self._lock:
+            return self.enabled, self.last_activity
+
+
+def maybe_idle_stop(registry: "Registry", state: DevState, poster=None, now: datetime | None = None) -> bool:
+    """If Dev mode is on and idle, turn indexing off on every camera."""
+    enabled, last = state.snapshot()
+    if not enabled or not idle_due(last, now=now):
+        return False
+    disable_all_indexing(registry, poster=poster)
+    state.touch(now)
+    return True
+
 
 PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -56,10 +157,11 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Witness registrar</title>
 <style>
-  body { font: 16px/1.4 ui-sans-serif, system-ui, sans-serif; margin: 2rem; color: #1c1917; background: #fafaf9; }
+  body { font: 16px/1.4 ui-sans-serif, system-ui, sans-serif; margin: 1rem 1.25rem 2rem; color: #1c1917; background: #fafaf9; }
   h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
   p.note { color: #57534e; margin-top: 0; }
   .card { background: white; border: 1px solid #e7e5e4; border-radius: 8px; padding: 1rem; margin: 1rem 0; max-width: 52rem; }
+  #list .card { max-width: 56rem; }
   img { max-width: 100%; background: #e7e5e4; }
   .meta { color: #57534e; font-size: 0.9rem; }
   .err { color: #9f1239; }
@@ -87,28 +189,50 @@ PAGE = """<!DOCTYPE html>
   @media (max-width: 640px) { .example-pair { grid-template-columns: 1fr; } }
   button.small { font: inherit; padding: 0.25rem 0.45rem; }
   .frame { position: relative; display: inline-block; max-width: 100%; }
-  .frame img { display: block; max-width: 100%; }
+  .frame img { display: block; max-width: 100%; width: min(100%, 640px); }
   .frame.paused { outline: 2px solid #a8a29e; outline-offset: 2px; }
   .frame-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.45rem 0 0; }
   .boxes { position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; }
   .box { position: absolute; border: 3px solid #16a34a; box-sizing: border-box; }
+  .watches { display: flex; flex-direction: column; gap: 0.55rem; margin: 0.75rem 0 0.35rem; }
+  .watch-score { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
+    padding: 0.65rem 0.85rem; border-radius: 10px; border: 2px solid transparent; }
+  .watch-score.yes { background: #dcfce7; border-color: #16a34a; color: #14532d; }
+  .watch-score.no { background: #ffe4e6; border-color: #e11d48; color: #881337; }
+  .watch-label { font-size: 1.15rem; font-weight: 650; text-transform: capitalize; }
+  .watch-value { font-size: 2rem; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1; }
+  .watch-state { font-size: 1.35rem; font-weight: 750; letter-spacing: 0.04em; }
+  .watch-time { font-size: 0.85rem; opacity: 0.75; margin-left: auto; }
+  .noul-charts { display: grid; gap: 0.75rem; margin-top: 0.85rem; }
+  .noul-chart { border: 1px solid #e7e5e4; border-radius: 8px; padding: 0.55rem 0.65rem 0.35rem; background: #fff; }
+  .noul-chart h3 { margin: 0 0 0.35rem; font-size: 0.95rem; }
+  .noul-chart svg { width: 100%; height: 120px; display: block; }
+  .noul-chart .axis { fill: #78716c; font-size: 10px; }
+  .card.stale { opacity: 0.72; border-style: dashed; }
+  .card.stale .frame { filter: grayscale(0.4); }
+  #switch-status { min-height: 1.2em; }
+  #switch-status.err { color: #9f1239; }
 </style>
 </head>
 <body>
 <h1>Witness registrar</h1>
 <p class="note" id="hint">Waiting for a camera to POST /api/register.</p>
+<div id="list"></div>
 <section class="card" id="ask">
   <h2>Ask a camera</h2>
-  <p class="meta">This computer reads the camera index over MCP, then answers from those captions.</p>
+  <p class="meta">This computer reads the on-camera index over MCP, including JEV watch scores, then answers with gpt-4.1-mini.</p>
   <label class="meta">Camera <select id="camera"></select></label>
   <div class="switches">
     <label class="meta" for="indexing"><input type="checkbox" id="indexing"> GPT indexing</label>
     <label class="meta" for="jev"><input type="checkbox" id="jev"> JEV indexing</label>
+    <label class="meta" for="dev-mode"><input type="checkbox" id="dev-mode"> Dev mode</label>
+    <p class="meta" id="switch-status"></p>
     <p class="meta">JEV indexing runs on the camera. The camera calls TypeSafe. This computer does not.</p>
+    <p class="meta">Dev mode turns GPT and JEV indexing off after 5 minutes without interaction. Restarts also start with indexing off.</p>
   </div>
   <div id="transcript"></div>
   <form class="query" id="query-form">
-    <input id="question" autocomplete="off" placeholder="How long ago was a hand in the frame, and for how long?">
+    <input id="question" autocomplete="off" placeholder="How many times was a pipette tip seen in the last 2 minutes?">
     <button type="submit">Ask</button>
   </form>
 </section>
@@ -123,7 +247,6 @@ PAGE = """<!DOCTYPE html>
   </div>
   <p class="meta" id="noul-status"></p>
 </section>
-<div id="list"></div>
 <script>
 const transcript = [];
 let indexingBusy = false;
@@ -132,10 +255,88 @@ let noulDraft = [];
 let noulCamera = null;
 const liveCards = new Map();
 const pausedCameras = new Set();
+const DEV_IDLE_MS = 5 * 60 * 1000;
+let lastUserActivity = Date.now();
+let idleWatchdog = null;
+let activityPing = null;
 
 function cameraId() {
   return document.getElementById("camera").value;
 }
+
+function noteActivity() {
+  lastUserActivity = Date.now();
+  if (activityPing) return;
+  activityPing = setTimeout(() => {
+    activityPing = null;
+    fetch("/api/activity", {method: "POST"}).catch(() => {});
+  }, 2000);
+}
+
+async function setCameraSwitch(kind, enabled) {
+  const camera = cameraId();
+  if (!camera) return false;
+  const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/" + kind, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({enabled}),
+  });
+  const data = await res.json().catch(() => ({}));
+  return res.ok ? !!data.enabled : null;
+}
+
+async function stopIndexingForIdle() {
+  setSwitchStatus("Dev mode: indexing stopped after 5 minutes idle.", false);
+  await fetch("/api/dev-idle", {method: "POST"}).catch(() => {});
+  document.getElementById("indexing").checked = false;
+  document.getElementById("jev").checked = false;
+}
+
+function armIdleWatchdog() {
+  if (idleWatchdog) clearInterval(idleWatchdog);
+  idleWatchdog = setInterval(() => {
+    if (!document.getElementById("dev-mode").checked) return;
+    if (Date.now() - lastUserActivity < DEV_IDLE_MS) return;
+    stopIndexingForIdle();
+    noteActivity();
+  }, 15000);
+}
+
+async function syncDevMode() {
+  const box = document.getElementById("dev-mode");
+  const res = await fetch("/api/dev-mode");
+  if (!res.ok) return;
+  const data = await res.json().catch(() => null);
+  if (!data) return;
+  box.checked = !!data.enabled;
+  armIdleWatchdog();
+}
+
+document.getElementById("dev-mode").addEventListener("change", async (event) => {
+  noteActivity();
+  const enabled = event.target.checked;
+  const res = await fetch("/api/dev-mode", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({enabled}),
+  });
+  const data = await res.json().catch(() => ({}));
+  event.target.checked = res.ok ? !!data.enabled : !enabled;
+  setSwitchStatus(
+    event.target.checked
+      ? "Dev mode on. Indexing turns off after 5 minutes idle."
+      : "Dev mode off.",
+    false,
+  );
+  armIdleWatchdog();
+});
+
+["click", "keydown", "change"].forEach((name) => {
+  document.addEventListener(name, (event) => {
+    if (event.target && event.target.id === "dev-mode") return;
+    noteActivity();
+  }, true);
+});
 
 function drawBox(box) {
   const el = document.createElement("div");
@@ -154,6 +355,19 @@ function drawBox(box) {
   return el;
 }
 
+function setSwitchStatus(text, isError) {
+  const status = document.getElementById("switch-status");
+  status.textContent = text || "";
+  status.classList.toggle("err", !!isError);
+}
+
+function cameraStale(cam) {
+  if (!cam || !cam.last_seen) return true;
+  const ms = Date.parse(cam.last_seen);
+  if (!Number.isFinite(ms)) return true;
+  return (Date.now() - ms) > 120000;
+}
+
 async function syncIndexing(camera) {
   const box = document.getElementById("indexing");
   if (!camera) {
@@ -164,14 +378,18 @@ async function syncIndexing(camera) {
   box.disabled = false;
   if (indexingBusy) return;
   const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/indexing");
-  if (!res.ok) return;
+  if (!res.ok) {
+    setSwitchStatus("Could not read GPT indexing from " + camera + ".", true);
+    return;
+  }
   const data = await res.json().catch(() => null);
   if (!data || indexingBusy) return;
   box.checked = !!data.enabled;
+  setSwitchStatus("", false);
 }
 
 document.getElementById("indexing").addEventListener("change", async (event) => {
-  const camera = document.getElementById("camera").value;
+  const camera = cameraId();
   const box = event.target;
   if (!camera) {
     box.checked = false;
@@ -179,6 +397,7 @@ document.getElementById("indexing").addEventListener("change", async (event) => 
   }
   indexingBusy = true;
   const enabled = box.checked;
+  setSwitchStatus(enabled ? "Turning GPT indexing on…" : "Turning GPT indexing off…", false);
   try {
     const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/indexing", {
       method: "POST",
@@ -186,9 +405,16 @@ document.getElementById("indexing").addEventListener("change", async (event) => 
       body: JSON.stringify({enabled}),
     });
     const data = await res.json().catch(() => ({}));
-    box.checked = res.ok ? !!data.enabled : !enabled;
+    if (!res.ok) {
+      box.checked = !enabled;
+      setSwitchStatus((data.error || "GPT indexing change failed") + " (" + camera + ").", true);
+    } else {
+      box.checked = !!data.enabled;
+      setSwitchStatus("GPT indexing is " + (data.enabled ? "on" : "off") + ".", false);
+    }
   } catch (err) {
     box.checked = !enabled;
+    setSwitchStatus("GPT indexing change failed (" + camera + ").", true);
   }
   indexingBusy = false;
 });
@@ -203,10 +429,14 @@ async function syncJev(camera) {
   box.disabled = false;
   if (jevBusy) return;
   const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/jev");
-  if (!res.ok) return;
+  if (!res.ok) {
+    setSwitchStatus("Could not read JEV indexing from " + camera + ".", true);
+    return;
+  }
   const data = await res.json().catch(() => null);
   if (!data || jevBusy) return;
   box.checked = !!data.enabled;
+  setSwitchStatus("", false);
 }
 
 document.getElementById("jev").addEventListener("change", async (event) => {
@@ -218,6 +448,7 @@ document.getElementById("jev").addEventListener("change", async (event) => {
   }
   jevBusy = true;
   const enabled = box.checked;
+  setSwitchStatus(enabled ? "Turning JEV indexing on…" : "Turning JEV indexing off…", false);
   try {
     const res = await fetch("/api/cameras/" + encodeURIComponent(camera) + "/jev", {
       method: "POST",
@@ -225,9 +456,16 @@ document.getElementById("jev").addEventListener("change", async (event) => {
       body: JSON.stringify({enabled}),
     });
     const data = await res.json().catch(() => ({}));
-    box.checked = res.ok ? !!data.enabled : !enabled;
+    if (!res.ok) {
+      box.checked = !enabled;
+      setSwitchStatus((data.error || "JEV indexing change failed") + " (" + camera + ").", true);
+    } else {
+      box.checked = !!data.enabled;
+      setSwitchStatus("JEV indexing is " + (data.enabled ? "on" : "off") + ".", false);
+    }
   } catch (err) {
     box.checked = !enabled;
+    setSwitchStatus("JEV indexing change failed (" + camera + ").", true);
   }
   jevBusy = false;
 });
@@ -457,14 +695,21 @@ async function uploadExample(index, file, polarity) {
       body: file.files[0],
     });
     if (!res.ok) {
-      setNoulStatus("Example upload failed.");
+      const text = (await res.text().catch(() => "")).trim();
+      if (res.status === 404 || res.status === 502) {
+        setNoulStatus("Example upload failed. The camera firmware does not have the noul routes yet. Flash the jev-nouls build.");
+      } else if (text && !text.includes("https://")) {
+        setNoulStatus("Example upload failed: " + text.slice(0, 160));
+      } else {
+        setNoulStatus("Example upload failed.");
+      }
       return;
     }
     item.examples.push({id, polarity: polarity === "no" ? "no" : "yes"});
     setNoulStatus("Example stored on the camera. Save the noul to keep it in the question.");
     renderNouls();
   } catch (err) {
-    setNoulStatus("Example upload failed.");
+    setNoulStatus("Example upload failed. The registrar could not reach the camera.");
   }
 }
 
@@ -548,13 +793,19 @@ document.getElementById("camera").addEventListener("change", () => {
 function syncCameras(cameras) {
   const select = document.getElementById("camera");
   const current = select.value;
-  select.replaceChildren(...cameras.map((cam) => {
+  const ordered = [...cameras].sort((a, b) => Number(cameraStale(a)) - Number(cameraStale(b)));
+  select.replaceChildren(...ordered.map((cam) => {
     const option = document.createElement("option");
     option.value = cam.id;
-    option.textContent = cam.id;
+    option.textContent = cam.id + (cameraStale(cam) ? " (stale)" : "");
     return option;
   }));
-  if (cameras.some((cam) => cam.id === current)) select.value = current;
+  const live = ordered.find((cam) => !cameraStale(cam));
+  if (ordered.some((cam) => cam.id === current) && !(cameraStale(ordered.find((cam) => cam.id === current)) && live)) {
+    select.value = current;
+  } else if (live) {
+    select.value = live.id;
+  }
 }
 
 function renderTranscript() {
@@ -629,6 +880,8 @@ function showFrame(card, blob) {
   card.img.src = card.objectUrl;
 }
 
+const CHART_WINDOW_MS = 10 * 60 * 1000;
+
 function ensureCard(cam) {
   let card = liveCards.get(cam.id);
   if (card) return card;
@@ -658,18 +911,171 @@ function ensureCard(cam) {
   downloadBtn.className = "small";
   downloadBtn.textContent = "Download";
   downloadBtn.addEventListener("click", () => downloadFrame(cam.id));
-  controls.append(pauseBtn, downloadBtn);
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "small";
+  removeBtn.textContent = "Remove";
+  removeBtn.addEventListener("click", () => removeCamera(cam.id));
+  controls.append(pauseBtn, downloadBtn, removeBtn);
+  const watches = document.createElement("div");
+  watches.className = "watches";
   const caption = document.createElement("p");
   caption.className = "meta";
+  const charts = document.createElement("div");
+  charts.className = "noul-charts";
   const err = document.createElement("p");
   err.className = "err";
-  section.append(title, meta, frame, controls, caption, err);
+  section.append(title, meta, frame, controls, watches, caption, charts, err);
   card = {
-    section, meta, frame, img, boxes, caption, err, pauseBtn,
+    section, meta, frame, img, boxes, watches, caption, charts, err, pauseBtn, removeBtn,
     loadToken: 0, frameBlob: null, objectUrl: null,
+    series: new Map(), historyLoaded: false, lastWatchT: "",
   };
   liveCards.set(cam.id, card);
+  loadWatchHistory(card, cam.id);
   return card;
+}
+
+function parseStamp(text) {
+  if (!text) return NaN;
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+function trimSeries(card) {
+  const cutoff = Date.now() - CHART_WINDOW_MS;
+  for (const [label, points] of card.series) {
+    const kept = points.filter((point) => point.t >= cutoff);
+    if (kept.length) card.series.set(label, kept);
+    else card.series.delete(label);
+  }
+}
+
+function rememberWatch(card, row) {
+  if (!row || !row.t || !row.watch || typeof row.watch !== "object") return;
+  const t = parseStamp(row.t);
+  if (!Number.isFinite(t)) return;
+  Object.keys(row.watch).forEach((label) => {
+    const score = Number(row.watch[label]);
+    if (!Number.isFinite(score)) return;
+    const points = card.series.get(label) || [];
+    const last = points[points.length - 1];
+    if (last && last.t === t) {
+      last.v = score;
+    } else if (!last || last.t < t) {
+      points.push({t, v: score});
+    }
+    card.series.set(label, points);
+  });
+  trimSeries(card);
+}
+
+function drawCharts(card) {
+  const labels = [...card.series.keys()].sort();
+  card.charts.replaceChildren(...labels.map((label) => {
+    const points = card.series.get(label) || [];
+    const wrap = document.createElement("div");
+    wrap.className = "noul-chart";
+    const heading = document.createElement("h3");
+    heading.textContent = label;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 640 120");
+    svg.setAttribute("preserveAspectRatio", "none");
+    const width = 640, height = 120, pad = 18;
+    const now = Date.now();
+    const minT = now - CHART_WINDOW_MS;
+    const xAt = (t) => pad + ((t - minT) / CHART_WINDOW_MS) * (width - pad * 2);
+    const yAt = (v) => (height - pad) - Math.max(0, Math.min(1, v)) * (height - pad * 2);
+    const axis = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    axis.setAttribute("x1", String(pad));
+    axis.setAttribute("x2", String(width - pad));
+    axis.setAttribute("y1", String(yAt(0.5)));
+    axis.setAttribute("y2", String(yAt(0.5)));
+    axis.setAttribute("stroke", "#d6d3d1");
+    axis.setAttribute("stroke-dasharray", "4 4");
+    svg.append(axis);
+    if (points.length) {
+      const path = points.map((point, index) => {
+        const x = xAt(Math.max(minT, point.t));
+        const y = yAt(point.v);
+        return (index ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+      }).join(" ");
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      line.setAttribute("d", path);
+      line.setAttribute("fill", "none");
+      line.setAttribute("stroke", "#0f766e");
+      line.setAttribute("stroke-width", "2.5");
+      svg.append(line);
+      const last = points[points.length - 1];
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", String(xAt(Math.max(minT, last.t))));
+      dot.setAttribute("cy", String(yAt(last.v)));
+      dot.setAttribute("r", "4");
+      dot.setAttribute("fill", last.v >= 0.5 ? "#16a34a" : "#e11d48");
+      svg.append(dot);
+    }
+    const left = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    left.setAttribute("class", "axis");
+    left.setAttribute("x", String(pad));
+    left.setAttribute("y", "14");
+    left.textContent = "10m ago";
+    const right = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    right.setAttribute("class", "axis");
+    right.setAttribute("x", String(width - pad));
+    right.setAttribute("y", "14");
+    right.setAttribute("text-anchor", "end");
+    right.textContent = "now";
+    svg.append(left, right);
+    wrap.append(heading, svg);
+    return wrap;
+  }));
+}
+
+function renderWatch(card, row) {
+  const watch = row && row.watch && typeof row.watch === "object" ? row.watch : null;
+  const labels = watch ? Object.keys(watch) : [];
+  // Keep the last YES/NO strip when a caption arrives without watch scores.
+  if (labels.length) {
+    card.watches.replaceChildren(...labels.map((label) => {
+      const score = Number(watch[label]);
+      const yes = score >= 0.5;
+      const el = document.createElement("div");
+      el.className = "watch-score " + (yes ? "yes" : "no");
+      const name = document.createElement("span");
+      name.className = "watch-label";
+      name.textContent = label;
+      const value = document.createElement("span");
+      value.className = "watch-value";
+      value.textContent = Number.isFinite(score) ? score.toFixed(2) : "—";
+      const state = document.createElement("span");
+      state.className = "watch-state";
+      state.textContent = yes ? "YES" : "NO";
+      const when = document.createElement("span");
+      when.className = "watch-time";
+      when.textContent = row.t || "";
+      el.append(name, value, state, when);
+      return el;
+    }));
+  }
+  if (row && row.caption) {
+    const objects = Array.isArray(row.objects) && row.objects.length ? " (" + row.objects.join(", ") + ")" : "";
+    card.caption.textContent = (row.t || "") + " — " + row.caption + objects;
+  }
+  rememberWatch(card, row);
+  drawCharts(card);
+}
+
+function loadWatchHistory(card, camera) {
+  if (card.historyLoaded) return;
+  card.historyLoaded = true;
+  fetch("/api/cameras/" + encodeURIComponent(camera) + "/index")
+    .then((res) => res.status === 200 ? res.json() : null)
+    .then((data) => {
+      const rows = data && Array.isArray(data.records) ? data.records : [];
+      rows.forEach((row) => rememberWatch(card, row));
+      drawCharts(card);
+    })
+    .catch(() => {});
 }
 
 function updateCaption(card, camera) {
@@ -678,13 +1084,9 @@ function updateCaption(card, camera) {
     .then((res) => res.status === 200 ? res.json() : null)
     .then((row) => {
       if (!row || pausedCameras.has(camera)) return;
-      if (row.caption) {
-        const objects = Array.isArray(row.objects) && row.objects.length ? " (" + row.objects.join(", ") + ")" : "";
-        card.caption.textContent = (row.t || "") + " — " + row.caption + objects;
-      } else if (row.t && row.watch && typeof row.watch === "object") {
-        const parts = Object.keys(row.watch).map((label) => label + " " + Number(row.watch[label]).toFixed(2));
-        if (parts.length) card.caption.textContent = row.t + " — " + parts.join(", ");
-      }
+      if (row.t && row.t === card.lastWatchT) return;
+      card.lastWatchT = row.t || "";
+      renderWatch(card, row);
       card.boxes.replaceChildren(...(Array.isArray(row.boxes) ? row.boxes : []).map(drawBox));
     })
     .catch(() => {});
@@ -710,6 +1112,24 @@ async function refreshFrame(card, camera, stamp) {
   } catch (err) {}
 }
 
+async function removeCamera(camera) {
+  if (!camera) return;
+  const res = await fetch("/api/cameras/" + encodeURIComponent(camera), {method: "DELETE"});
+  if (!res.ok) {
+    setSwitchStatus("Could not remove " + camera + ".", true);
+    return;
+  }
+  const card = liveCards.get(camera);
+  if (card && card.objectUrl) URL.revokeObjectURL(card.objectUrl);
+  liveCards.delete(camera);
+  pausedCameras.delete(camera);
+  if (cameraId() === camera) {
+    document.getElementById("camera").value = "";
+  }
+  setSwitchStatus("Removed " + camera + ".", false);
+  await load();
+}
+
 async function load() {
   const res = await fetch("/api/cameras");
   const data = await res.json();
@@ -729,7 +1149,9 @@ async function load() {
     list.replaceChildren();
     return;
   }
-  hint.textContent = data.cameras.length + " camera" + (data.cameras.length === 1 ? "" : "s") + " on the LAN.";
+  const liveCount = data.cameras.filter((cam) => !cameraStale(cam)).length;
+  hint.textContent = liveCount + " live camera" + (liveCount === 1 ? "" : "s")
+    + " · " + data.cameras.length + " registered.";
   syncCameras(data.cameras);
   syncIndexing(cameraId());
   syncJev(cameraId());
@@ -739,12 +1161,18 @@ async function load() {
   const cards = data.cameras.map((cam) => {
     seen.add(cam.id);
     const card = ensureCard(cam);
-    card.meta.textContent = cam.ip + " · last seen " + cam.last_seen + (cam.fw ? " · fw " + cam.fw : "");
-    card.err.textContent = cam.last_view_error || "";
+    const stale = cameraStale(cam);
+    card.section.classList.toggle("stale", stale);
+    card.meta.textContent = cam.ip + " · last seen " + cam.last_seen
+      + (cam.fw ? " · fw " + cam.fw : "")
+      + (stale ? " · stale" : "");
+    card.err.textContent = cam.last_view_error || (stale ? "Camera has not registered recently. Remove it if it is gone." : "");
     card.frame.classList.toggle("paused", pausedCameras.has(cam.id));
     card.pauseBtn.textContent = pausedCameras.has(cam.id) ? "Resume" : "Pause";
-    refreshFrame(card, cam.id, stamp);
-    updateCaption(card, cam.id);
+    if (!stale) {
+      refreshFrame(card, cam.id, stamp);
+      updateCaption(card, cam.id);
+    }
     return card.section;
   });
   for (const id of [...liveCards.keys()]) {
@@ -761,6 +1189,7 @@ async function load() {
   if (!same) list.replaceChildren(...cards);
 }
 load();
+syncDevMode();
 setInterval(load, 2000);
 </script>
 </body>
@@ -858,6 +1287,14 @@ class Registry:
                 item["last_view_ok"] = utc_now()
             self.save()
 
+    def remove(self, camera_id: str) -> bool:
+        with self._lock:
+            if camera_id not in self.cameras:
+                return False
+            del self.cameras[camera_id]
+            self.save()
+            return True
+
 
 def fetch_authed(ip: str, path: str, limit: int) -> tuple[int, bytes, str]:
     password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
@@ -881,9 +1318,18 @@ def fetch_frame(ip: str) -> tuple[int, bytes, str]:
 
 
 def shrink_jpeg(data: bytes) -> bytes:
+    # TypeSafe image limits: each side 280..1568, area 78400..2458624
+    # (https://docs.typesafe.ai/images). thumbnail() only shrinks.
     image = Image.open(BytesIO(data))
     image = image.convert("RGB")
-    image.thumbnail((320, 320))
+    width, height = image.size
+    min_side = 280
+    max_side = 1568
+    if width < min_side or height < min_side:
+        scale = max(min_side / width, min_side / height)
+        image = image.resize((max(min_side, round(width * scale)), max(min_side, round(height * scale))))
+    if max(image.size) > max_side:
+        image.thumbnail((max_side, max_side))
     raw = b""
     quality = 85
     while quality >= 40:
@@ -1000,6 +1446,12 @@ def index_records(text: str) -> tuple[list[dict], bool]:
     for row in parsed:
         if not isinstance(row, dict) or not row.get("t"):
             continue
+        watch = row.get("watch") if isinstance(row.get("watch"), dict) else {}
+        yes = [
+            label
+            for label, score in watch.items()
+            if isinstance(score, (int, float)) and float(score) >= 0.5
+        ]
         rows.append(
             {
                 "t": row.get("t"),
@@ -1007,7 +1459,8 @@ def index_records(text: str) -> tuple[list[dict], bool]:
                 "objects": row.get("objects") or [],
                 "actions": row.get("actions") or [],
                 "motion": row.get("motion"),
-                "watch": row.get("watch") if isinstance(row.get("watch"), dict) else {},
+                "watch": watch,
+                "yes": yes,
             }
         )
     rows.sort(key=lambda row: str(row["t"]))
@@ -1028,17 +1481,21 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
     prompt = (
         "You answer questions about a single Witness camera using only the keyframe index below.\n"
         "Each record is one keyframe. The camera writes one on the first frame, then every 3 seconds "
-        "while the scene is moving, and about once a minute when it is still.\n"
+        "while the scene is moving, and about every 5 seconds when it is still.\n"
         "Record times are UTC. Answer in America/Los_Angeles local time, and say how long ago that was "
         f"relative to the current time, {now}.\n"
+        "GPT captions may be empty when GPT indexing is off. That does not mean nothing was seen.\n"
+        "The watch field is the primary evidence for noul questions: each key is a label, each value is "
+        "a yes-probability from 0 to 1 from on-camera JEV. A value of 0.5 or higher means YES for that "
+        "label in that keyframe. The yes array lists those labels explicitly.\n"
+        "Match the user's words to watch labels loosely (for example pipette tip, tip present, tip).\n"
+        "When asked how many times something was seen, count keyframes where that label is in yes "
+        "(or watch >= 0.5). When asked when it was last seen, use the newest such keyframe.\n"
         "When asked how long something was in frame, the duration is only the span from the earliest "
-        "keyframe that shows it to the latest keyframe that shows it. The next keyframe that does not "
-        "show it is an upper bound on when it left, not extra time it was visible.\n"
-        "The watch field holds on-camera JEV yes-probabilities from 0 to 1. "
-        "A value of 0.5 or higher means yes. Use those scores the same way as captions "
-        "when deciding when something was present or absent.\n"
-        "If the index does not mention it, say so. Do not invent events.\n"
-        "Answer in a few plain sentences. Do not use markdown.\n\n"
+        "yes keyframe to the latest yes keyframe. The next keyframe that is not yes is an upper bound "
+        "on when it left, not extra time it was visible.\n"
+        "Only say the index has no evidence if no watch label and no caption/object/action matches.\n"
+        "Do not invent events. Answer in a few plain sentences. Do not use markdown.\n\n"
         f"{note}Question: {question}\n\n"
         f"Index records:\n{json.dumps(records)}\n\n"
         f"Recording minutes:\n{recordings[:4000]}"
@@ -1071,8 +1528,31 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
     return text
 
 
+def load_index(ip: str) -> tuple[list[dict], bool]:
+    """Pull index rows for Ask and charts.
+
+    Older camera builds filled heap on an empty search and never reached today's
+    JEV lines, so merge an unfiltered pull with a typesafe-filtered one.
+    """
+    by_t: dict[str, dict] = {}
+    truncated = False
+    for query in ("", "typesafe"):
+        try:
+            rows, cut = index_records(mcp_call(ip, "search_index", {"query": query}))
+        except QueryError:
+            continue
+        truncated = truncated or cut
+        for row in rows:
+            by_t[str(row["t"])] = row
+    rows = sorted(by_t.values(), key=lambda row: str(row["t"]))
+    if len(rows) > INDEX_LIMIT:
+        rows = rows[-INDEX_LIMIT:]
+        truncated = True
+    return rows, truncated
+
+
 def run_query(ip: str, question: str) -> str:
-    records, truncated = index_records(mcp_call(ip, "search_index", {"query": ""}))
+    records, truncated = load_index(ip)
     try:
         recordings = mcp_call(ip, "list_recordings", {"from": "-6h", "to": "-0s"})
     except QueryError:
@@ -1080,7 +1560,9 @@ def run_query(ip: str, question: str) -> str:
     return answer_question(question, records, recordings, truncated)
 
 
-def make_handler(registry: Registry):
+def make_handler(registry: Registry, dev_state: DevState | None = None):
+    state = dev_state or DevState()
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args) -> None:
             sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -1096,10 +1578,21 @@ def make_handler(registry: Registry):
         def _json(self, status: int, payload: dict) -> None:
             self._send(status, json.dumps(payload).encode(), "application/json")
 
+        def _dev_payload(self) -> dict:
+            enabled, last = state.snapshot()
+            return {
+                "enabled": enabled,
+                "idle_s": DEV_IDLE_S,
+                "last_activity": last.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+
         def do_GET(self) -> None:
             path = urlparse(self.path).path
             if path == "/":
                 self._send(200, PAGE.encode(), "text/html; charset=utf-8")
+                return
+            if path == "/api/dev-mode":
+                self._json(200, self._dev_payload())
                 return
             if path == "/api/cameras":
                 self._json(200, {"cameras": registry.list()})
@@ -1118,6 +1611,19 @@ def make_handler(registry: Registry):
                 else:
                     registry.note_view(camera_id, body.decode().strip())
                 self._send(status, body, ctype)
+                return
+            if path.startswith(prefix) and path.endswith("/index"):
+                camera_id = path[len(prefix) : -len("/index")]
+                camera = registry.get(camera_id)
+                if camera is None:
+                    self._send(404, b"unknown camera\n", "text/plain")
+                    return
+                try:
+                    records, truncated = load_index(camera["ip"])
+                except QueryError as exc:
+                    self._json(exc.status, {"error": str(exc)})
+                    return
+                self._json(200, {"records": records, "truncated": truncated})
                 return
             caption_suffix = "/caption"
             if path.startswith(prefix) and path.endswith(caption_suffix):
@@ -1149,14 +1655,29 @@ def make_handler(registry: Registry):
 
         def do_POST(self) -> None:
             path = urlparse(self.path).path
+            if path == "/api/dev-mode":
+                self._dev_mode_post()
+                return
+            if path == "/api/activity":
+                state.touch()
+                self._json(200, {"ok": True})
+                return
+            if path == "/api/dev-idle":
+                stopped = disable_all_indexing(registry)
+                state.touch()
+                self._json(200, {"ok": True, "stopped": stopped})
+                return
             prefix = "/api/cameras/"
             if path.startswith(prefix) and path.endswith("/query"):
+                state.touch()
                 self._query(path[len(prefix) : -len("/query")])
                 return
             if path.startswith(prefix) and path.endswith("/indexing"):
+                state.touch()
                 self._indexing_post(path[len(prefix) : -len("/indexing")])
                 return
             if path.startswith(prefix) and path.endswith("/jev"):
+                state.touch()
                 self._jev_post(path[len(prefix) : -len("/jev")])
                 return
             if path != "/api/register":
@@ -1194,6 +1715,24 @@ def make_handler(registry: Registry):
             saved = registry.upsert(camera_id, peer, fw[:32], board[:64])
             self._json(200, {"ok": True, "id": saved["id"], "ip": saved["ip"]})
 
+        def _dev_mode_post(self) -> None:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > 256:
+                self._json(400, {"error": "body must be 1 to 256 bytes"})
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+            except json.JSONDecodeError:
+                self._json(400, {"error": "invalid json"})
+                return
+            enabled = body.get("enabled") if isinstance(body, dict) else None
+            if not isinstance(enabled, bool):
+                self._json(400, {"error": "enabled must be a boolean"})
+                return
+            state.set_enabled(enabled)
+            payload = self._dev_payload()
+            self._json(200, payload)
+
         def _indexing_get(self, camera_id: str) -> None:
             camera = registry.get(camera_id)
             if camera is None:
@@ -1221,7 +1760,7 @@ def make_handler(registry: Registry):
                 self._json(400, {"error": "enabled must be a boolean"})
                 return
             status, raw, ctype = post_authed(camera["ip"], "/api/v1/indexing", {"enabled": enabled})
-            self._send(status, raw, ctype if status == 200 else "text/plain")
+            self._send_switch(status, raw, ctype, enabled)
 
         def _jev_get(self, camera_id: str) -> None:
             camera = registry.get(camera_id)
@@ -1250,7 +1789,14 @@ def make_handler(registry: Registry):
                 self._json(400, {"error": "enabled must be a boolean"})
                 return
             status, raw, ctype = post_authed(camera["ip"], "/api/v1/jev", {"enabled": enabled})
-            self._send(status, raw, ctype if status == 200 else "text/plain")
+            self._send_switch(status, raw, ctype, enabled)
+
+        def _send_switch(self, status: int, raw: bytes, ctype: str, enabled: bool) -> None:
+            if status == 200 and ctype.startswith("application/json"):
+                self._send(status, raw, ctype)
+                return
+            detail = raw.decode("utf-8", "replace").strip()[:200] or f"camera returned HTTP {status}"
+            self._json(status if status >= 400 else 502, {"error": detail, "enabled": False})
 
         def _nouls_get(self, camera_id: str) -> None:
             camera = registry.get(camera_id)
@@ -1279,6 +1825,21 @@ def make_handler(registry: Registry):
             prefix = "/api/cameras/"
             if path.startswith(prefix) and path.endswith("/nouls"):
                 self._nouls_put(path[len(prefix) : -len("/nouls")])
+                return
+            self._send(404, b"not found\n", "text/plain")
+
+        def do_DELETE(self) -> None:
+            path = urlparse(self.path).path
+            prefix = "/api/cameras/"
+            if path.startswith(prefix) and path.count("/") == 3:
+                camera_id = path[len(prefix) :]
+                if not ID_RE.match(camera_id):
+                    self._json(400, {"error": "bad camera id"})
+                    return
+                if not registry.remove(camera_id):
+                    self._json(404, {"error": "unknown camera"})
+                    return
+                self._json(200, {"ok": True, "id": camera_id})
                 return
             self._send(404, b"not found\n", "text/plain")
 
@@ -1355,8 +1916,25 @@ def make_handler(registry: Registry):
     return Handler
 
 
-def serve(host: str, port: int, registry: Registry) -> ThreadingHTTPServer:
-    httpd = ThreadingHTTPServer((host, port), make_handler(registry))
+def start_idle_watchdog(registry: Registry, state: DevState, interval_s: float = 15.0) -> threading.Event:
+    stop = threading.Event()
+
+    def loop() -> None:
+        while not stop.wait(interval_s):
+            if maybe_idle_stop(registry, state):
+                print("dev_mode=idle indexing=off", flush=True)
+
+    threading.Thread(target=loop, name="dev-idle-watchdog", daemon=True).start()
+    return stop
+
+
+def serve(host: str, port: int, registry: Registry, dev_state: DevState | None = None) -> ThreadingHTTPServer:
+    state = dev_state or DevState()
+    stopped = disable_all_indexing(registry)
+    print(f"indexing=off cameras={stopped}", flush=True)
+    print(f"dev_mode={'on' if state.enabled else 'off'} idle_s={DEV_IDLE_S}", flush=True)
+    start_idle_watchdog(registry, state)
+    httpd = ThreadingHTTPServer((host, port), make_handler(registry, state))
     httpd.serve_forever()
     return httpd
 
@@ -1403,13 +1981,83 @@ def run_check() -> int:
         if (
             "Witness registrar" not in page
             or "/caption" not in page
+            or "/index" not in page
             or "Ask a camera" not in page
             or "GPT indexing" not in page
             or "JEV indexing" not in page
             or "JEV nouls" not in page
             or "runs on the camera" not in page
+            or "watch-score" not in page
+            or "noul-charts" not in page
+            or "JEV watch scores" not in page
+            or "switch-status" not in page
+            or "removeCamera" not in page
+            or 'textContent = "Remove"' not in page
         ):
             raise SystemExit("page missing title")
+        if camera_is_stale({"last_seen": "2000-01-01T00:00:00Z"}) is not True:
+            raise SystemExit("stale detection failed")
+        if camera_is_stale({"last_seen": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}) is not False:
+            raise SystemExit("fresh camera marked stale")
+        delete_missing = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/cameras/no-such",
+            method="DELETE",
+        )
+        try:
+            urllib.request.urlopen(delete_missing, timeout=3)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise SystemExit(f"unexpected missing-camera delete status {exc.code}")
+        else:
+            raise SystemExit("unknown camera delete should be 404")
+        delete_ok = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/cameras/witness-test",
+            method="DELETE",
+        )
+        with urllib.request.urlopen(delete_ok, timeout=3) as resp:
+            deleted = json.loads(resp.read())
+        if deleted.get("ok") is not True:
+            raise SystemExit(f"delete failed: {deleted}")
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/cameras", timeout=3) as resp:
+            after = json.loads(resp.read())
+        if after.get("cameras"):
+            raise SystemExit("camera remained after delete")
+        # Re-register for the rest of the checks.
+        with urllib.request.urlopen(
+            urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/register",
+                data=json.dumps({"id": "witness-test", "fw": "0.0.0", "board": "foriot_s3cam"}).encode(),
+                headers={"Content-Type": "application/json"},
+            ),
+            timeout=3,
+        ) as resp:
+            json.loads(resp.read())
+        sample_rows, _truncated = index_records(
+            json.dumps(
+                [
+                    {
+                        "t": "2026-11-03T16:00:00.000Z",
+                        "caption": "",
+                        "watch": {"pipette tip": 0.91},
+                    },
+                    {
+                        "t": "2026-11-03T16:00:05.000Z",
+                        "caption": "",
+                        "watch": {"pipette tip": 0.08},
+                    },
+                ]
+            )
+        )
+        if sample_rows[0]["yes"] != ["pipette tip"] or sample_rows[1]["yes"] != []:
+            raise SystemExit("watch yes enrichment failed")
+        index_missing = f"http://127.0.0.1:{port}/api/cameras/no-such/index"
+        try:
+            urllib.request.urlopen(index_missing, timeout=3)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise SystemExit(f"unexpected missing-camera index status {exc.code}")
+        else:
+            raise SystemExit("unknown camera index should be 404")
         query_missing = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/cameras/no-such/query",
             data=json.dumps({"text": "was a hand in frame?"}).encode(),
@@ -1448,12 +2096,15 @@ def run_check() -> int:
             method="POST",
         )
         try:
-            urllib.request.urlopen(query_url, timeout=3)
+            with urllib.request.urlopen(query_url, timeout=45) as resp:
+                payload = json.loads(resp.read())
+            # Unreachable camera usually 502/503. With a model key, Ask may still
+            # answer from an empty index after the MCP fetch fails soft.
+            if not isinstance(payload, dict) or not (payload.get("answer") or payload.get("error")):
+                raise SystemExit(f"unexpected query payload: {payload}")
         except urllib.error.HTTPError as exc:
             if exc.code not in (502, 503):
                 raise SystemExit(f"unexpected query status {exc.code}")
-        else:
-            raise SystemExit("query should fail without a camera")
         indexing_missing = f"http://127.0.0.1:{port}/api/cameras/no-such/indexing"
         try:
             urllib.request.urlopen(indexing_missing, timeout=3)

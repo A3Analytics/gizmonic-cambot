@@ -1,4 +1,4 @@
-"""Keyframe policy: idle every 60 s, active every 3 s, always on a robot mark."""
+"""Keyframe policy: idle every 5 s, active every 3 s, always on a robot mark."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ def keyframe_due(
     *,
     mark: bool = False,
     motion_threshold: float = 0.05,
-    idle_s: float = 60,
+    idle_s: float = 5,
     active_s: float = 3,
 ) -> bool:
     if mark or last is None:

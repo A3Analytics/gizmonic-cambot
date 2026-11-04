@@ -51,6 +51,57 @@ static int cmp_path(const void *left, const void *right) {
     return strcmp(*(char *const *)left, *(char *const *)right);
 }
 
+#define SEARCH_INDEX_MAX 200
+
+static char **list_index_files(int *count) {
+    *count = 0;
+    int cap = 0;
+    char **paths = NULL;
+    DIR *days = opendir(WITNESS_ROOT "/index");
+    if (!days) {
+        return NULL;
+    }
+    struct dirent *day;
+    while ((day = readdir(days)) != NULL) {
+        if (day->d_name[0] == '.') {
+            continue;
+        }
+        char day_path[192];
+        snprintf(day_path, sizeof day_path, WITNESS_ROOT "/index/%s", day->d_name);
+        DIR *hours = opendir(day_path);
+        if (!hours) {
+            continue;
+        }
+        struct dirent *hour;
+        while ((hour = readdir(hours)) != NULL) {
+            size_t name_len = strlen(hour->d_name);
+            if (name_len < 7 || strcmp(hour->d_name + name_len - 6, ".jsonl") != 0) {
+                continue;
+            }
+            if (*count == cap) {
+                cap = cap ? cap * 2 : 8;
+                char **grown = realloc(paths, (size_t)cap * sizeof(char *));
+                if (!grown) {
+                    closedir(hours);
+                    closedir(days);
+                    goto done;
+                }
+                paths = grown;
+            }
+            char full[224];
+            snprintf(full, sizeof full, "%s/%s", day_path, hour->d_name);
+            paths[(*count)++] = strdup(full);
+        }
+        closedir(hours);
+    }
+    closedir(days);
+done:
+    if (paths && *count > 1) {
+        qsort(paths, (size_t)*count, sizeof(char *), cmp_path);
+    }
+    return paths;
+}
+
 static char **list_idx(int *count) {
     *count = 0;
     int cap = 0;
@@ -478,46 +529,35 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
         const char *query = cJSON_GetStringValue(cJSON_GetObjectItem(arguments, "query"));
         cJSON *rows = cJSON_CreateArray();
         char *line = malloc(4096);
-        DIR *days = line ? opendir(WITNESS_ROOT "/index") : NULL;
-        if (days) {
-            struct dirent *day;
-            while ((day = readdir(days)) != NULL) {
-                if (day->d_name[0] == '.') {
-                    continue;
-                }
-                char day_path[192];
-                snprintf(day_path, sizeof day_path, WITNESS_ROOT "/index/%s", day->d_name);
-                DIR *hours = opendir(day_path);
-                if (!hours) {
-                    continue;
-                }
-                struct dirent *hour;
-                while ((hour = readdir(hours)) != NULL) {
-                    size_t name_len = strlen(hour->d_name);
-                    if (name_len < 7 || strcmp(hour->d_name + name_len - 6, ".jsonl") != 0) {
-                        continue;
-                    }
-                    char file_path[224];
-                    snprintf(file_path, sizeof file_path, "%s/%s", day_path, hour->d_name);
-                    FILE *file = fopen(file_path, "r");
-                    if (!file) {
-                        continue;
-                    }
-                    while (fgets(line, 4096, file)) {
-                        if (query && query[0] && strcasestr(line, query) == NULL) {
-                            continue;
-                        }
-                        cJSON *row = cJSON_Parse(line);
-                        if (row) {
-                            cJSON_AddItemToArray(rows, row);
-                        }
-                    }
-                    fclose(file);
-                }
-                closedir(hours);
+        int file_count = 0;
+        char **files = list_index_files(&file_count);
+        /* Keep only the newest SEARCH_INDEX_MAX matches so old GPT captions cannot
+         * exhaust heap before today's JEV watch rows are reached. */
+        for (int i = 0; line && files && i < file_count; i++) {
+            FILE *file = fopen(files[i], "r");
+            if (!file) {
+                continue;
             }
-            closedir(days);
+            while (fgets(line, 4096, file)) {
+                if (query && query[0] && strcasestr(line, query) == NULL) {
+                    continue;
+                }
+                cJSON *row = cJSON_Parse(line);
+                if (!row) {
+                    continue;
+                }
+                cJSON_AddItemToArray(rows, row);
+                while (cJSON_GetArraySize(rows) > SEARCH_INDEX_MAX) {
+                    cJSON *drop = cJSON_DetachItemFromArray(rows, 0);
+                    cJSON_Delete(drop);
+                }
+            }
+            fclose(file);
         }
+        for (int i = 0; files && i < file_count; i++) {
+            free(files[i]);
+        }
+        free(files);
         free(line);
         char *printed = cJSON_PrintUnformatted(rows);
         cJSON_Delete(rows);

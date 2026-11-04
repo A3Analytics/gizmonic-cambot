@@ -172,6 +172,7 @@ esp_err_t witness_llm_jev(const char *api_key, const uint8_t *jpeg, size_t jpeg_
     }
     if (status >= 400) {
         ESP_LOGW(TAG, "model=dropped provider=jev status=%d", status);
+        printf("jev=fail status=%d\n", status);
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -202,6 +203,7 @@ esp_err_t witness_llm_jev_post(const char *api_key, const char *body, char *out,
     }
     if (status >= 400) {
         ESP_LOGW(TAG, "model=dropped provider=jev status=%d", status);
+        printf("jev=fail status=%d\n", status);
         return ESP_FAIL;
     }
     return ESP_OK;

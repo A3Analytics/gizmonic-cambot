@@ -106,8 +106,8 @@ def test_keyframe_policy():
     assert keyframe_due(None, start, 0.0) is True
     assert keyframe_due(start, start + timedelta(seconds=2), 0.9) is False
     assert keyframe_due(start, start + timedelta(seconds=3), 0.9) is True
-    assert keyframe_due(start, start + timedelta(seconds=59), 0.0) is False
-    assert keyframe_due(start, start + timedelta(seconds=60), 0.0) is True
+    assert keyframe_due(start, start + timedelta(seconds=4), 0.0) is False
+    assert keyframe_due(start, start + timedelta(seconds=5), 0.0) is True
     assert keyframe_due(start, start, 0.0, mark=True) is True
 
 

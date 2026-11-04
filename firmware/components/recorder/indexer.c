@@ -77,14 +77,8 @@ void witness_indexer_set_keys(const char *openai, const char *jev) {
 }
 
 static void load_enabled(void) {
+    /* Always boot with indexing off. The registrar turns it on when needed. */
     index_enabled = false;
-    FILE *file = fopen(WITNESS_ROOT "/index_enabled", "r");
-    if (!file) {
-        return;
-    }
-    int ch = fgetc(file);
-    fclose(file);
-    index_enabled = ch == '1';
 }
 
 bool witness_indexer_enabled(void) {
@@ -93,26 +87,22 @@ bool witness_indexer_enabled(void) {
 
 bool witness_indexer_set_enabled(bool enabled) {
     FILE *file = fopen(WITNESS_ROOT "/index_enabled", "w");
-    if (!file) {
-        return false;
+    if (file) {
+        fputc(enabled ? '1' : '0', file);
+        fputc('\n', file);
+        fclose(file);
+    } else {
+        /* No card yet: keep the switch live in RAM so the registrar UX works. */
+        printf("index=ram_only\n");
     }
-    fputc(enabled ? '1' : '0', file);
-    fputc('\n', file);
-    fclose(file);
     index_enabled = enabled;
     printf("index=%s\n", enabled ? "started" : "stopped");
     return true;
 }
 
 static void load_jev_enabled(void) {
+    /* Always boot with JEV off. */
     jev_enabled = false;
-    FILE *file = fopen(WITNESS_ROOT "/jev_enabled", "r");
-    if (!file) {
-        return;
-    }
-    int ch = fgetc(file);
-    fclose(file);
-    jev_enabled = ch == '1';
 }
 
 bool witness_jev_enabled(void) {
@@ -121,12 +111,13 @@ bool witness_jev_enabled(void) {
 
 bool witness_jev_set_enabled(bool enabled) {
     FILE *file = fopen(WITNESS_ROOT "/jev_enabled", "w");
-    if (!file) {
-        return false;
+    if (file) {
+        fputc(enabled ? '1' : '0', file);
+        fputc('\n', file);
+        fclose(file);
+    } else {
+        printf("jev=ram_only\n");
     }
-    fputc(enabled ? '1' : '0', file);
-    fputc('\n', file);
-    fclose(file);
     jev_enabled = enabled;
     printf("jev=%s\n", enabled ? "started" : "stopped");
     return true;
@@ -489,7 +480,7 @@ static int box_edges(cJSON *answer, double *top, double *bottom, double *left, d
 static bool ask_jev(const uint8_t *jpeg, size_t len, const question_t *questions, int count, cJSON *watch,
                     cJSON *boxes, const char *iso) {
     witness_jev_asset assets[QUESTION_MAX * EXAMPLE_MAX];
-    char asset_keys[QUESTION_MAX * EXAMPLE_MAX][8];
+    char asset_keys[QUESTION_MAX * EXAMPLE_MAX][16];
     witness_jev_question outgoing[QUESTION_MAX];
     char instructions[QUESTION_MAX][640];
     char *photo = NULL;

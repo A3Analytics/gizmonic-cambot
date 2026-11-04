@@ -25,10 +25,10 @@ int main(void) {
     if (!witness_keyframe_due(true, 3000, 900, false)) {
         return 5;
     }
-    if (witness_keyframe_due(true, 59000, 0, false)) {
+    if (witness_keyframe_due(true, 4000, 0, false)) {
         return 6;
     }
-    if (!witness_keyframe_due(true, 60000, 0, false)) {
+    if (!witness_keyframe_due(true, 5000, 0, false)) {
         return 7;
     }
     if (!witness_keyframe_due(true, 0, 0, true)) {
