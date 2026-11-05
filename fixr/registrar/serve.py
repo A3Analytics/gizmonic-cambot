@@ -2,9 +2,9 @@
 """LAN registrar for a Witness camera.
 
 The camera POSTs /api/register when it joins the network. This page lists
-each camera and refreshes its live frame. A query box on this computer calls
-the camera MCP for the on-card index, then asks gpt-4.1-mini to answer from
-those captions. The camera password and model key are never printed or stored.
+each camera and refreshes its live frame. A query box on this computer reads
+the local index copy in fixr/run/index.sqlite, then asks gpt-4.1-mini to answer
+from that history. The camera password and model key are never printed or stored.
 
   /opt/homebrew/bin/python3.13 fixr/registrar/serve.py
   /opt/homebrew/bin/python3.13 fixr/registrar/serve.py --check
@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -29,6 +30,11 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image
 
+if __package__:
+    from fixr.registrar.index_store import IndexStore, summarize_lines
+else:
+    from index_store import IndexStore, summarize_lines
+
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -36,6 +42,8 @@ MODEL_NAME = "gpt-4.1-mini"
 INDEX_LIMIT = 400
 RUN = ROOT / "run"
 REGISTRY = RUN / "cameras.json"
+INDEX_DB = RUN / "index.sqlite"
+INDEX_STORE: IndexStore | None = None
 PROFILE = ROOT / "profiles" / "waterbear.json"
 HOST_SCHEMA = ROOT / "schema" / "host-profile.schema.json"
 FRAME_PATH = "/api/v1/frame.jpg"
@@ -1642,6 +1650,174 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
     return text
 
 
+def answer_from_history(question: str, summary: dict, recordings: str) -> str:
+    """Ask the model about the registrar's copy of the index, not the camera."""
+    key = model_key()
+    if not key:
+        raise QueryError(503, "WITNESS_MODEL_KEY is not set")
+    now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+    prompt = (
+        "You answer questions about a single Witness camera using only the history below.\n"
+        "The history is the camera's keyframe index, copied onto this computer. It can cover "
+        "several days. It is not a live card scan.\n"
+        "Each keyframe is about 1.5 seconds apart. Times in the history are UTC. Answer in "
+        f"America/Los_Angeles local time, and say how long ago that was relative to {now}.\n"
+        "labels maps a watch label to its evidence. yes_frames is how many keyframes scored "
+        "0.5 or higher. episodes is how many separate sightings that was, split when the label "
+        "was absent for more than 5 seconds. latest_episodes lists the newest of those sightings. "
+        "by_hour counts yes keyframes per UTC hour.\n"
+        "recent lists the newest keyframes with their yes labels and any caption.\n"
+        "Match the user's words to watch labels loosely (for example pipette tip, tip present, tip).\n"
+        "When asked how many times something was seen, use episodes for separate sightings and "
+        "yes_frames when they ask how many keyframes. When asked when it was last seen, use last.\n"
+        "When asked how long something was in frame, use the span of the matching episode. "
+        "Do not add the gap after it left.\n"
+        "Only say the index has no evidence if no label, recent caption, or hour count matches.\n"
+        "If complete is false, the copy has not reached the newest keyframe yet. Answer from "
+        "what is present. Do not treat a time after the history as time you have already seen.\n"
+        "Do not invent events. Answer in a few plain sentences. Do not use markdown.\n\n"
+        f"Question: {question}\n\n"
+        f"History:\n{json.dumps(summary)}\n\n"
+        f"Recording minutes:\n{recordings[:4000]}"
+    )
+    payload = {
+        "model": MODEL_NAME,
+        "max_tokens": 500,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode(),
+        method="POST",
+    )
+    req.add_header("Authorization", "Bearer " + key)
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            body = json.loads(resp.read(1_000_000))
+    except urllib.error.HTTPError as exc:
+        raise QueryError(502, f"model returned HTTP {exc.code}") from exc
+    except Exception as exc:
+        raise QueryError(502, f"model unreachable: {exc.__class__.__name__}") from exc
+    try:
+        text = body["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError, TypeError) as exc:
+        raise QueryError(502, "model returned no answer") from exc
+    if not text:
+        raise QueryError(502, "model returned no answer")
+    return text
+
+
+def copy_latest(ip: str, camera_id: str, store: IndexStore) -> int:
+    status, body, _ctype = fetch_authed(ip, "/api/v1/index/latest", 8192)
+    if status != 200 or not body:
+        return 0
+    return store.insert_lines(camera_id, [body])
+
+
+def copy_recent(ip: str, camera_id: str, store: IndexStore) -> int:
+    """Copy the camera's in-memory recent index. This does not read the card."""
+    return store.insert_lines(camera_id, _index_lines(mcp_call(ip, "search_index", {"query": ""})))
+
+
+def backfill_step(ip: str, camera_id: str, store: IndexStore) -> tuple[int, bool, int]:
+    """Read one short page of the on-card index into the local copy."""
+    cursor, _done = store.cursor(camera_id)
+    text = mcp_call(ip, "read_index_page", {"cursor": cursor, "limit": 40})
+    try:
+        page = json.loads(text) if text else {}
+    except json.JSONDecodeError as exc:
+        raise QueryError(502, "index page was not valid JSON") from exc
+    if not isinstance(page, dict):
+        raise QueryError(502, "index page was not an object")
+    lines = page.get("lines") if isinstance(page.get("lines"), list) else []
+    added = store.insert_lines(camera_id, [line for line in lines if isinstance(line, str)])
+    done = bool(page.get("done"))
+    next_cursor = str(page.get("next") or "")
+    if done and not next_cursor:
+        next_cursor = cursor
+    store.set_cursor(camera_id, next_cursor, done)
+    return added, done, len(lines)
+
+
+def _index_lines(text: str) -> list[str]:
+    try:
+        parsed = json.loads(text) if text else []
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [json.dumps(row) for row in parsed if isinstance(row, dict) and row.get("t")]
+
+
+def start_index_sync(registry: Registry, store: IndexStore) -> threading.Event:
+    """Copy new index rows in the background. Questions never start this work."""
+    stop = threading.Event()
+    state = {"recent_at": 0.0, "backfill_at": 0.0, "pages": 0, "latest_warned": False, "idle": False}
+
+    def loop() -> None:
+        while not stop.wait(1.0):
+            now = time.time()
+            cameras = [item for item in registry.list() if item.get("ip") and item.get("id")]
+            for camera in cameras:
+                if not store.backfill_done(camera["id"]):
+                    continue
+                try:
+                    copy_latest(camera["ip"], camera["id"], store)
+                    state["latest_warned"] = False
+                except Exception as exc:
+                    if not state["latest_warned"]:
+                        print(
+                            f"index_sync=latest_fail camera={camera['id']} err={type(exc).__name__}",
+                            flush=True,
+                        )
+                        state["latest_warned"] = True
+            if now >= state["recent_at"]:
+                state["recent_at"] = now + 10
+                for camera in cameras:
+                    if not store.backfill_done(camera["id"]):
+                        continue
+                    try:
+                        added = copy_recent(camera["ip"], camera["id"], store)
+                        if added:
+                            print(f"index_sync=recent camera={camera['id']} added={added}", flush=True)
+                    except Exception as exc:
+                        print(
+                            f"index_sync=recent_fail camera={camera['id']} err={type(exc).__name__}",
+                            flush=True,
+                        )
+            if now < state["backfill_at"] or not cameras:
+                continue
+            camera = cameras[0]
+            try:
+                added, done, nlines = backfill_step(camera["ip"], camera["id"], store)
+            except Exception as exc:
+                print(
+                    f"index_backfill=fail camera={camera['id']} err={type(exc).__name__}",
+                    flush=True,
+                )
+                state["backfill_at"] = now + 60
+                continue
+            state["pages"] += 1
+            if nlines == 0 and done:
+                state["backfill_at"] = now + 30
+            else:
+                state["backfill_at"] = now + 1
+            if done and not state["idle"]:
+                print(f"index_backfill=done camera={camera['id']} records={store.count(camera['id'])}", flush=True)
+                state["idle"] = True
+            elif not done:
+                state["idle"] = False
+                if added and state["pages"] % 25 == 0:
+                    print(
+                        f"index_backfill camera={camera['id']} added={added} records={store.count(camera['id'])}",
+                        flush=True,
+                    )
+
+    threading.Thread(target=loop, name="index-sync", daemon=True).start()
+    return stop
+
+
 def load_index(ip: str) -> tuple[list[dict], bool]:
     """Pull the camera's recent index rows for Ask and charts.
 
@@ -1658,7 +1834,22 @@ def load_index(ip: str) -> tuple[list[dict], bool]:
     return rows, truncated
 
 
-def run_query(ip: str, question: str) -> str:
+def run_query(ip: str, question: str, camera_id: str | None = None, store: IndexStore | None = None) -> str:
+    """Answer from the local copy as soon as it has rows.
+
+    Until the first page lands, use the camera's memory index. The copy is a
+    prefix of the card, so a question during the copy covers everything copied
+    so far and does not itself read the card.
+    """
+    if camera_id and store is not None:
+        summary = summarize_lines(store.lines(camera_id))
+        if summary["keyframes"]:
+            summary["complete"] = store.backfill_done(camera_id)
+            try:
+                recordings = mcp_call(ip, "list_recordings", {"from": "-30m", "to": "-0s"})
+            except QueryError:
+                recordings = ""
+            return answer_from_history(question, summary, recordings)
     records, truncated = load_index(ip)
     try:
         recordings = mcp_call(ip, "list_recordings", {"from": "-30m", "to": "-0s"})
@@ -2101,7 +2292,7 @@ def make_handler(
                 self._json(400, {"error": "text must be 1 to 500 characters"})
                 return
             try:
-                answer = run_query(camera["ip"], text.strip())
+                answer = run_query(camera["ip"], text.strip(), camera_id, INDEX_STORE)
             except QueryError as exc:
                 self._json(exc.status, {"error": exc.message})
                 return
@@ -2139,6 +2330,10 @@ def serve(
         f"{POLL_MS_HIGH_PERF if perf.enabled else POLL_MS_DEFAULT}",
         flush=True,
     )
+    global INDEX_STORE
+    INDEX_STORE = IndexStore(INDEX_DB)
+    print(f"index_db={INDEX_DB}", flush=True)
+    start_index_sync(registry, INDEX_STORE)
     if perf.enabled:
         set_cameras_perf(registry, True)
     start_idle_watchdog(registry, state)

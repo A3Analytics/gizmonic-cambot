@@ -432,7 +432,8 @@ static cJSON *text_content(const char *text) {
 
 static const char *TOOLS =
     "[{\"name\":\"get_status\"},{\"name\":\"list_recordings\"},{\"name\":\"search_index\"},"
-    "{\"name\":\"inspect_window\"},{\"name\":\"make_clip\"},{\"name\":\"get_live_frame\"}]";
+    "{\"name\":\"read_index_page\"},{\"name\":\"inspect_window\"},{\"name\":\"make_clip\"},"
+    "{\"name\":\"get_live_frame\"}]";
 
 static cJSON *call_tool(const char *name, cJSON *arguments) {
     if (strcmp(name, "get_status") == 0) {
@@ -469,6 +470,19 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
         /* RAM only. The card scan ran on the HTTP task and took the camera offline. */
         char *printed = witness_index_recent_json(query);
         cJSON *result = tool_result(text_content(printed ? printed : "[]"), false);
+        free(printed);
+        return result;
+    }
+    if (strcmp(name, "read_index_page") == 0) {
+        const char *cursor = arguments ? cJSON_GetStringValue(cJSON_GetObjectItem(arguments, "cursor")) : NULL;
+        cJSON *limit_item = arguments ? cJSON_GetObjectItem(arguments, "limit") : NULL;
+        int limit = limit_item && cJSON_IsNumber(limit_item) ? limit_item->valueint : 40;
+        /* One short page. The registrar walks these; the live view is served between calls. */
+        char *printed = witness_index_read_page(cursor ? cursor : "", limit);
+        if (!printed) {
+            return tool_result(text_content("index page failed"), true);
+        }
+        cJSON *result = tool_result(text_content(printed), false);
         free(printed);
         return result;
     }

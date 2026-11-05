@@ -1,5 +1,8 @@
 #include "witness_recorder.h"
 
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -235,6 +238,221 @@ char *witness_index_recent_json(const char *query) {
     xSemaphoreGive(recent_lock);
     free(match);
     return out;
+}
+
+/* A page is a few dozen lines. The HTTP task returns between pages so a
+ * question can cover the card without holding the live view. */
+#define PAGE_LINE_MAX 40
+#define PAGE_BYTES (24 * 1024)
+#define PAGE_LINE_CAP 16384
+
+typedef struct {
+    char rel[40];
+} index_file_t;
+
+static int cmp_index_file(const void *left, const void *right) {
+    return strcmp(((const index_file_t *)left)->rel, ((const index_file_t *)right)->rel);
+}
+
+static int list_index_files(index_file_t **out) {
+    *out = NULL;
+    DIR *days = opendir(WITNESS_ROOT "/index");
+    if (!days) {
+        return 0;
+    }
+    int count = 0;
+    int cap = 0;
+    index_file_t *files = NULL;
+    struct dirent *day;
+    while ((day = readdir(days)) != NULL) {
+        if (day->d_name[0] == '.' || strlen(day->d_name) != 10) {
+            continue;
+        }
+        char day_path[160];
+        snprintf(day_path, sizeof day_path, WITNESS_ROOT "/index/%s", day->d_name);
+        DIR *hours = opendir(day_path);
+        if (!hours) {
+            continue;
+        }
+        struct dirent *hour;
+        while ((hour = readdir(hours)) != NULL) {
+            size_t name_len = strlen(hour->d_name);
+            if (name_len < 7 || strcmp(hour->d_name + name_len - 6, ".jsonl") != 0) {
+                continue;
+            }
+            if (count == cap) {
+                cap = cap ? cap * 2 : 16;
+                if (cap > 2048) {
+                    closedir(hours);
+                    closedir(days);
+                    free(files);
+                    *out = NULL;
+                    return -1;
+                }
+                index_file_t *grown = realloc(files, (size_t)cap * sizeof(index_file_t));
+                if (!grown) {
+                    closedir(hours);
+                    closedir(days);
+                    free(files);
+                    *out = NULL;
+                    return -1;
+                }
+                files = grown;
+            }
+            snprintf(files[count].rel, sizeof files[count].rel, "%s/%s", day->d_name, hour->d_name);
+            count++;
+        }
+        closedir(hours);
+    }
+    closedir(days);
+    if (count > 1) {
+        qsort(files, (size_t)count, sizeof(index_file_t), cmp_index_file);
+    }
+    *out = files;
+    return count;
+}
+
+static bool cursor_path(const char *cursor, char *path, size_t path_cap, long *offset) {
+    *offset = 0;
+    path[0] = '\0';
+    if (!cursor || !cursor[0]) {
+        return true;
+    }
+    if (strstr(cursor, "..") != NULL) {
+        return false;
+    }
+    const char *colon = strrchr(cursor, ':');
+    if (!colon || colon == cursor) {
+        return false;
+    }
+    size_t len = (size_t)(colon - cursor);
+    if (len == 0 || len >= path_cap || len < 16) {
+        return false;
+    }
+    memcpy(path, cursor, len);
+    path[len] = '\0';
+    if (path[10] != '/' || strcmp(path + len - 6, ".jsonl") != 0) {
+        return false;
+    }
+    char *end = NULL;
+    long value = strtol(colon + 1, &end, 10);
+    if (!end || *end != '\0' || value < 0) {
+        return false;
+    }
+    *offset = value;
+    return true;
+}
+
+char *witness_index_read_page(const char *cursor, int limit) {
+    if (limit < 1) {
+        limit = 1;
+    }
+    if (limit > PAGE_LINE_MAX) {
+        limit = PAGE_LINE_MAX;
+    }
+    index_file_t *files = NULL;
+    int count = list_index_files(&files);
+    if (count < 0) {
+        return NULL;
+    }
+    char path[40];
+    long offset = 0;
+    int idx = 0;
+    if (!cursor_path(cursor, path, sizeof path, &offset)) {
+        free(files);
+        return NULL;
+    }
+    if (path[0]) {
+        for (; idx < count; idx++) {
+            int cmp = strcmp(files[idx].rel, path);
+            if (cmp == 0) {
+                break;
+            }
+            if (cmp > 0) {
+                offset = 0;
+                break;
+            }
+        }
+    }
+    cJSON *root = cJSON_CreateObject();
+    cJSON *lines = cJSON_CreateArray();
+    char *buf = malloc(PAGE_LINE_CAP);
+    if (!root || !lines || !buf) {
+        cJSON_Delete(root);
+        cJSON_Delete(lines);
+        free(buf);
+        free(files);
+        return NULL;
+    }
+    int kept = 0;
+    size_t bytes = 0;
+    char parked[40] = "";
+    long parked_at = 0;
+    while (idx < count && kept < limit && bytes < PAGE_BYTES) {
+        char full[192];
+        snprintf(full, sizeof full, WITNESS_ROOT "/index/%s", files[idx].rel);
+        FILE *file = fopen(full, "rb");
+        if (!file) {
+            idx++;
+            offset = 0;
+            continue;
+        }
+        if (offset > 0 && fseek(file, offset, SEEK_SET) != 0) {
+            fclose(file);
+            idx++;
+            offset = 0;
+            continue;
+        }
+        while (kept < limit && bytes < PAGE_BYTES && fgets(buf, PAGE_LINE_CAP, file)) {
+            size_t len = strlen(buf);
+            int partial = len + 1 >= PAGE_LINE_CAP && buf[len - 1] != '\n';
+            if (partial) {
+                int ch;
+                while ((ch = fgetc(file)) != EOF && ch != '\n') {
+                }
+                continue;
+            }
+            while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
+                buf[--len] = '\0';
+            }
+            if (len == 0) {
+                continue;
+            }
+            cJSON_AddItemToArray(lines, cJSON_CreateString(buf));
+            kept++;
+            bytes += len;
+        }
+        int eof = feof(file);
+        offset = ftell(file);
+        fclose(file);
+        if (!eof) {
+            break;
+        }
+        /* Remember the end of this file. A finished copy must resume here,
+         * not at the first file, or the registrar reads the card forever. */
+        snprintf(parked, sizeof parked, "%s", files[idx].rel);
+        parked_at = offset < 0 ? 0 : offset;
+        idx++;
+        offset = 0;
+    }
+    bool done = idx >= count;
+    cJSON_AddItemToObject(root, "lines", lines);
+    char next[80];
+    next[0] = '\0';
+    if (!done) {
+        snprintf(next, sizeof next, "%s:%ld", files[idx].rel, offset);
+    } else if (parked[0]) {
+        snprintf(next, sizeof next, "%s:%ld", parked, parked_at);
+    } else if (cursor && cursor[0]) {
+        snprintf(next, sizeof next, "%s", cursor);
+    }
+    cJSON_AddStringToObject(root, "next", next);
+    cJSON_AddBoolToObject(root, "done", done);
+    char *printed = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    free(buf);
+    free(files);
+    return printed;
 }
 
 static int fits(const char *text, size_t cap) {

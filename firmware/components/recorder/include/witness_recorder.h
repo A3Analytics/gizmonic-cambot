@@ -41,5 +41,9 @@ bool witness_index_copy_latest(char *dst, size_t cap);
 /* JSON array of the newest index records kept in RAM. Caller frees it. */
 char *witness_index_recent_json(const char *query);
 
+/* One short page of the on-card index, oldest first. cursor is empty or
+ * "YYYY-MM-DD/HH.jsonl:byte". Caller frees the JSON object. NULL on failure. */
+char *witness_index_read_page(const char *cursor, int limit);
+
 /* Minute frame counts kept in RAM since boot. Returns how many minutes were written. */
 int witness_recorder_minutes(time_t start, time_t end, time_t *minutes, uint16_t *frames, int cap);
