@@ -19,16 +19,16 @@ int main(void) {
     if (!witness_keyframe_due(false, 0, 0, false)) {
         return 3;
     }
-    if (witness_keyframe_due(true, 2000, 900, false)) {
+    if (witness_keyframe_due(true, 1000, 900, false)) {
         return 4;
     }
-    if (!witness_keyframe_due(true, 3000, 900, false)) {
+    if (!witness_keyframe_due(true, 1500, 900, false)) {
         return 5;
     }
-    if (witness_keyframe_due(true, 4000, 0, false)) {
+    if (witness_keyframe_due(true, 1000, 0, false)) {
         return 6;
     }
-    if (!witness_keyframe_due(true, 5000, 0, false)) {
+    if (!witness_keyframe_due(true, 1500, 0, false)) {
         return 7;
     }
     if (!witness_keyframe_due(true, 0, 0, true)) {

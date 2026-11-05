@@ -8,6 +8,8 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "mbedtls/base64.h"
 
 static const char *TAG = "witness.llm";
@@ -178,10 +180,79 @@ esp_err_t witness_llm_jev(const char *api_key, const uint8_t *jpeg, size_t jpeg_
     return ESP_OK;
 }
 
+/* One TLS connection to JEV, kept open between keyframes. A fresh handshake
+ * costs about 1.8 s on the camera; a reused connection skips it. */
+static esp_http_client_handle_t jev_client;
+static SemaphoreHandle_t jev_lock;
+
+static void jev_drop(void) {
+    if (jev_client) {
+        esp_http_client_close(jev_client);
+        esp_http_client_cleanup(jev_client);
+        jev_client = NULL;
+    }
+}
+
+static esp_err_t jev_exchange(const char *auth, const char *body, char *out, size_t out_cap, int *status,
+                              bool *reused) {
+    *reused = jev_client != NULL;
+    if (!jev_client) {
+        esp_http_client_config_t cfg = {
+            .url = WITNESS_JEV_URL,
+            .method = HTTP_METHOD_POST,
+            .timeout_ms = 20000,
+            .crt_bundle_attach = esp_crt_bundle_attach,
+            .keep_alive_enable = true,
+        };
+        jev_client = esp_http_client_init(&cfg);
+        if (!jev_client) {
+            return ESP_FAIL;
+        }
+        esp_http_client_set_header(jev_client, "Content-Type", "application/json");
+        esp_http_client_set_header(jev_client, WITNESS_JEV_IMAGES_HEADER, "true");
+    }
+    esp_http_client_set_header(jev_client, "Authorization", auth);
+    int body_len = (int)strlen(body);
+    int status_code = 0;
+    int total = 0;
+    esp_err_t err = esp_http_client_open(jev_client, body_len);
+    if (err == ESP_OK && esp_http_client_write(jev_client, body, body_len) != body_len) {
+        err = ESP_FAIL;
+    }
+    if (err == ESP_OK) {
+        int64_t length = esp_http_client_fetch_headers(jev_client);
+        status_code = esp_http_client_get_status_code(jev_client);
+        if (status_code <= 0 || (length < 0 && status_code < 200)) {
+            err = ESP_FAIL;
+        } else {
+            while (out && total < (int)out_cap - 1) {
+                int got = esp_http_client_read(jev_client, out + total, (int)out_cap - 1 - total);
+                if (got <= 0) {
+                    break;
+                }
+                total += got;
+            }
+            if (!esp_http_client_is_complete_data_received(jev_client)) {
+                esp_http_client_flush_response(jev_client, NULL);
+            }
+        }
+    }
+    if (out && out_cap > 0) {
+        out[total] = '\0';
+    }
+    if (err != ESP_OK || !esp_http_client_is_complete_data_received(jev_client)) {
+        jev_drop();
+    }
+    *status = status_code;
+    ESP_LOGI(TAG, "model_http status=%d url=%s reused=%d", status_code, WITNESS_JEV_URL, *reused ? 1 : 0);
+    return err;
+}
+
 esp_err_t witness_llm_jev_post(const char *api_key, const char *body, char *out, size_t out_cap) {
     char *auth;
     int status = 0;
     esp_err_t err;
+    bool reused = false;
     if (!api_key || !api_key[0] || !body || !body[0]) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -190,10 +261,25 @@ esp_err_t witness_llm_jev_post(const char *api_key, const char *body, char *out,
         return ESP_ERR_NO_MEM;
     }
     snprintf(auth, strlen(api_key) + 8, "Bearer %s", api_key);
-    err = post_json(WITNESS_JEV_URL, "Authorization", auth, WITNESS_JEV_IMAGES_HEADER, "true", body, out, out_cap,
-                    &status);
+    if (!jev_lock) {
+        jev_lock = xSemaphoreCreateMutex();
+    }
+    if (!jev_lock || xSemaphoreTake(jev_lock, pdMS_TO_TICKS(30000)) != pdTRUE) {
+        memset(auth, 0, strlen(api_key) + 8);
+        free(auth);
+        return ESP_ERR_TIMEOUT;
+    }
+    err = jev_exchange(auth, body, out, out_cap, &status, &reused);
+    if (err != ESP_OK && reused) {
+        /* The server closed the idle connection; one retry on a fresh one. */
+        err = jev_exchange(auth, body, out, out_cap, &status, &reused);
+    }
+    xSemaphoreGive(jev_lock);
     memset(auth, 0, strlen(api_key) + 8);
     free(auth);
+    if (err != ESP_OK) {
+        printf("jev=fail err=%s\n", esp_err_to_name(err));
+    }
     if (err != ESP_OK) {
         return err;
     }

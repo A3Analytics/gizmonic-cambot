@@ -15,8 +15,12 @@
 #include "witness_llm.h"
 #include "witness_llm_client.h"
 
-#define BATCH 4
-#define BUDGET_FRAMES 2000
+/* One pending keyframe: a newer frame replaces it, so JEV always scores the
+ * freshest picture instead of working through a backlog. */
+#define PENDING 1
+/* About 9 hours of JEV at one frame every 1.6 s. */
+#define BUDGET_FRAMES 20000
+#define EVENTS_EVERY_S 10
 #define QUESTION_MAX 8
 #define EXAMPLE_MAX 4
 #define ALERT_SLOTS 16
@@ -540,8 +544,12 @@ static bool ask_jev(const uint8_t *jpeg, size_t len, const question_t *questions
     if (!body) {
         body = malloc((size_t)body_cap);
     }
-    response = malloc(8192);
+    response = heap_caps_malloc(8192, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!response) {
+        response = malloc(8192);
+    }
     if (!body || !response) {
+        printf("jev=fail err=no_mem\n");
         goto done;
     }
     wrote = witness_jev_request(body, (size_t)body_cap, WITNESS_JEV_MODEL, photo, assets, asset_count, outgoing, count);
@@ -800,10 +808,16 @@ static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, c
            caption ? "openai" : "jev");
     free(printed);
     cJSON_Delete(record);
-    if (caption || have_watch) {
+    /* Rebuilding the day's events reads every record on the card; doing it per
+     * keyframe slowed JEV updates and starved internal RAM. */
+    static time_t events_at;
+    static char events_day[16];
+    if ((caption || have_watch) &&
+        (item->when - events_at >= EVENTS_EVERY_S || strcmp(day, events_day) != 0)) {
         rewrite_events(day);
+        events_at = item->when;
+        snprintf(events_day, sizeof events_day, "%s", day);
     }
-    (void)have_watch;
 }
 
 static void discard_batch(keyframe_t *batch, int count) {
@@ -822,7 +836,11 @@ static void flush_batch(keyframe_t *batch, int count) {
         return;
     }
     if (!budget_allows(count, batch[0].when)) {
-        printf("index=paused frames_today=%d\n", frames_today);
+        static time_t paused_logged;
+        if (batch[0].when - paused_logged >= 60) {
+            printf("index=paused frames_today=%d\n", frames_today);
+            paused_logged = batch[0].when;
+        }
         for (int i = 0; i < count; i++) {
             free(batch[i].jpeg);
             batch[i].jpeg = NULL;
@@ -881,24 +899,17 @@ static void flush_batch(keyframe_t *batch, int count) {
 
 static void indexer_task(void *arg) {
     (void)arg;
-    keyframe_t batch[BATCH];
-    int count = 0;
     while (1) {
         keyframe_t item;
-        if (xQueueReceive(keyframes, &item, pdMS_TO_TICKS(1000)) == pdTRUE) {
-            if (!either_index()) {
-                free(item.jpeg);
-                continue;
-            }
-            batch[count++] = item;
-            if (count >= BATCH) {
-                flush_batch(batch, count);
-                count = 0;
-            }
-        } else if (count > 0) {
-            flush_batch(batch, count);
-            count = 0;
+        if (xQueueReceive(keyframes, &item, portMAX_DELAY) != pdTRUE) {
+            continue;
         }
+        if (!either_index()) {
+            free(item.jpeg);
+            continue;
+        }
+        /* One JEV call per frame. Waiting for a batch of 4 only delayed the score. */
+        flush_batch(&item, 1);
     }
 }
 
@@ -921,16 +932,31 @@ void witness_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16
     };
     snprintf(item.seg, sizeof item.seg, "%s", seg);
     if (xQueueSend(keyframes, &item, 0) != pdTRUE) {
-        free(copy);
+        keyframe_t stale;
+        if (xQueueReceive(keyframes, &stale, 0) == pdTRUE) {
+            free(stale.jpeg);
+        }
+        if (xQueueSend(keyframes, &item, 0) != pdTRUE) {
+            free(copy);
+        }
     }
 }
 
+static void *json_malloc(size_t size) {
+    void *ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    return ptr ? ptr : malloc(size);
+}
+
 void witness_indexer_start(void) {
+    /* cJSON trees are thousands of small nodes; in internal RAM they left too
+     * little contiguous DMA memory for SD writes and Wi-Fi. */
+    cJSON_Hooks hooks = {.malloc_fn = json_malloc, .free_fn = free};
+    cJSON_InitHooks(&hooks);
     load_enabled();
     load_jev_enabled();
     printf("index=%s jev=%s\n", index_enabled ? "started" : "stopped", jev_enabled ? "started" : "stopped");
     latest_lock = xSemaphoreCreateMutex();
-    keyframes = xQueueCreate(BATCH, sizeof(keyframe_t));
+    keyframes = xQueueCreate(PENDING, sizeof(keyframe_t));
     if (!keyframes) {
         printf("index=fail err=queue\n");
         return;

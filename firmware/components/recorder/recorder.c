@@ -11,6 +11,7 @@
 
 #include "esp_camera.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "esp_vfs_fat.h"
 #include "freertos/task.h"
 #include "sdmmc_cmd.h"
@@ -31,11 +32,17 @@ static uint32_t seg_frame;
 static char seg_name[40];
 static uint8_t *copy_buf;
 static size_t copy_cap;
+static size_t copy_len;
+static SemaphoreHandle_t preview_lock;
 static uint8_t *prev_gray;
 static uint8_t *curr_gray;
 static size_t prev_gray_len;
 static bool have_keyframe;
-static time_t last_keyframe;
+static int64_t last_keyframe_ms;
+static bool high_perf;
+static unsigned capture_ms = 200;
+static unsigned fflush_every = 1;
+static unsigned since_fflush;
 
 bool witness_sd_ready(void) {
     return sd_ready;
@@ -45,16 +52,81 @@ SemaphoreHandle_t witness_recorder_lock(void) {
     return camera_lock;
 }
 
+bool witness_recorder_peek_jpeg(uint8_t *dst, size_t cap, size_t *out_len) {
+    if (!dst || !out_len || !preview_lock) {
+        return false;
+    }
+    if (xSemaphoreTake(preview_lock, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return false;
+    }
+    bool ok = copy_buf && copy_len > 0 && copy_len <= cap;
+    if (ok) {
+        memcpy(dst, copy_buf, copy_len);
+        *out_len = copy_len;
+    }
+    xSemaphoreGive(preview_lock);
+    return ok;
+}
+
+bool witness_perf_enabled(void) {
+    return high_perf;
+}
+
+unsigned witness_perf_capture_ms(void) {
+    return capture_ms;
+}
+
+static void apply_perf(bool enabled) {
+    high_perf = enabled;
+    /* Keep 5 fps. A 100 ms loop made live frame fetches slower and stalled
+     * other HTTP handlers when the UI polled hard. */
+    capture_ms = 200;
+    fflush_every = enabled ? 5 : 1;
+    since_fflush = 0;
+}
+
+bool witness_perf_set_enabled(bool enabled) {
+    if (!sd_ready) {
+        apply_perf(enabled);
+        return true;
+    }
+    FILE *file = fopen(WITNESS_ROOT "/high_perf", "w");
+    if (!file) {
+        return false;
+    }
+    fputc(enabled ? '1' : '0', file);
+    fclose(file);
+    apply_perf(enabled);
+    printf("perf=%s capture_ms=%u fflush_every=%u\n", enabled ? "on" : "off", capture_ms, fflush_every);
+    return true;
+}
+
+static void load_perf(void) {
+    /* Absent file = install-safe defaults. */
+    FILE *file = fopen(WITNESS_ROOT "/high_perf", "r");
+    if (!file) {
+        apply_perf(false);
+        return;
+    }
+    int ch = fgetc(file);
+    fclose(file);
+    apply_perf(ch == '1');
+    printf("perf=%s capture_ms=%u\n", high_perf ? "on" : "off", capture_ms);
+}
+
 static void close_segment(void) {
     if (seg_mjpg) {
+        fflush(seg_mjpg);
         fclose(seg_mjpg);
         seg_mjpg = NULL;
     }
     if (seg_idx) {
+        fflush(seg_idx);
         fclose(seg_idx);
         seg_idx = NULL;
     }
     seg_minute = -1;
+    since_fflush = 0;
 }
 
 static void delete_hour(const char *day, const char *hour) {
@@ -190,7 +262,14 @@ static bool append_jpeg(const uint8_t *jpeg, size_t len, uint16_t motion_milli, 
         return false;
     }
     if (fwrite(jpeg, 1, len, seg_mjpg) != len) {
-        printf("recording=fail err=write\n");
+        /* A failed stream stays failed until the minute rolls over; reopen it
+         * on the next frame instead. */
+        static unsigned write_fails;
+        write_fails++;
+        printf("recording=fail err=write count=%u internal_free=%u internal_block=%u\n", write_fails,
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA),
+               (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));
+        close_segment();
         return false;
     }
     uint8_t raw[WITNESS_IDX_SIZE];
@@ -199,8 +278,12 @@ static bool append_jpeg(const uint8_t *jpeg, size_t len, uint16_t motion_milli, 
         return false;
     }
     fwrite(raw, 1, sizeof raw, seg_idx);
-    fflush(seg_mjpg);
-    fflush(seg_idx);
+    since_fflush++;
+    if (since_fflush >= fflush_every) {
+        fflush(seg_mjpg);
+        fflush(seg_idx);
+        since_fflush = 0;
+    }
     if (frame_out) {
         *frame_out = seg_frame;
     }
@@ -216,6 +299,9 @@ static void recorder_task(void *arg) {
             camera_fb_t *frame = esp_camera_fb_get();
             size_t len = 0;
             if (frame && frame->len > 1 && frame->buf[0] == 0xff && frame->buf[1] == 0xd8) {
+                if (preview_lock) {
+                    xSemaphoreTake(preview_lock, portMAX_DELAY);
+                }
                 if (frame->len > copy_cap) {
                     free(copy_buf);
                     copy_buf = heap_caps_malloc(frame->len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -223,7 +309,11 @@ static void recorder_task(void *arg) {
                 }
                 if (copy_buf && frame->len <= copy_cap) {
                     memcpy(copy_buf, frame->buf, frame->len);
+                    copy_len = frame->len;
                     len = frame->len;
+                }
+                if (preview_lock) {
+                    xSemaphoreGive(preview_lock);
                 }
             }
             if (frame) {
@@ -243,24 +333,30 @@ static void recorder_task(void *arg) {
                     memcpy(prev_gray, curr_gray, gray_len);
                     prev_gray_len = gray_len;
                 }
-                uint32_t frame_index = 0;
+                uint32_t frame_index = seg_frame;
                 bool synced = witness_time_synced();
-                if (append_jpeg(copy_buf, len, motion, &frame_index) && synced) {
-                    time_t now = time(NULL);
-                    int64_t elapsed = have_keyframe ? (int64_t)(now - last_keyframe) * 1000 : 0;
+                append_jpeg(copy_buf, len, motion, &frame_index);
+                /* Keyframes go to the indexer even when the SD write failed, so the
+                 * live score keeps updating. */
+                if (synced) {
+                    int64_t now_ms = esp_timer_get_time() / 1000;
+                    int64_t elapsed = have_keyframe ? now_ms - last_keyframe_ms : 0;
                     if (witness_keyframe_due(have_keyframe, elapsed, motion, false)) {
                         have_keyframe = true;
-                        last_keyframe = now;
-                        witness_indexer_submit(copy_buf, len, now, motion, frame_index, seg_name);
+                        last_keyframe_ms = now_ms;
+                        witness_indexer_submit(copy_buf, len, time(NULL), motion, frame_index, seg_name);
                     }
                 }
                 frames++;
                 if (frames == 1 || frames % 300 == 0) {
-                    printf("recording=ok frames=%u synced=%s\n", frames, witness_time_synced() ? "yes" : "no");
+                    printf("recording=ok frames=%u synced=%s perf=%s internal_free=%u internal_block=%u\n", frames,
+                           witness_time_synced() ? "yes" : "no", high_perf ? "on" : "off",
+                           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA),
+                           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));
                 }
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(capture_ms));
     }
 }
 
@@ -301,9 +397,11 @@ static esp_err_t mount_sd(void) {
 
 esp_err_t witness_recorder_start(SemaphoreHandle_t lock) {
     camera_lock = lock;
+    preview_lock = xSemaphoreCreateMutex();
     if (mount_sd() != ESP_OK) {
         return ESP_FAIL;
     }
+    load_perf();
     witness_indexer_start();
     if (xTaskCreatePinnedToCore(recorder_task, "recorder", 16384, NULL, 4, NULL, 1) != pdPASS &&
         xTaskCreate(recorder_task, "recorder", 16384, NULL, 4, NULL) != pdPASS) {

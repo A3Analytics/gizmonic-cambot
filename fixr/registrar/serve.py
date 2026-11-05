@@ -51,6 +51,10 @@ PORT = 8765
 STALE_AFTER_S = 120
 DEV_IDLE_S = 5 * 60
 DEV_MODE_PATH = RUN / "dev_mode.json"
+HIGH_PERF_PATH = RUN / "high_perf.json"
+POLL_MS_DEFAULT = 2000
+POLL_MS_HIGH_PERF = 500
+SWITCH_SYNC_MS = 30_000
 
 
 def camera_is_stale(cam: dict, now: datetime | None = None) -> bool:
@@ -85,6 +89,37 @@ def save_dev_mode(enabled: bool, path: Path = DEV_MODE_PATH) -> None:
     path.write_text(json.dumps({"enabled": bool(enabled)}, indent=2) + "\n")
 
 
+def load_high_perf(path: Path = HIGH_PERF_PATH) -> bool:
+    if not path.exists():
+        return False
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(payload.get("enabled")) if isinstance(payload, dict) else False
+
+
+def save_high_perf(enabled: bool, path: Path = HIGH_PERF_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"enabled": bool(enabled)}, indent=2) + "\n")
+
+
+def set_cameras_perf(registry: "Registry", enabled: bool, poster=None) -> int:
+    """Best-effort: push high-performance mode to every registered camera."""
+    send = poster or post_authed
+    updated = 0
+    for camera in registry.list():
+        ip = camera.get("ip")
+        if not isinstance(ip, str) or not ip:
+            continue
+        try:
+            send(ip, "/api/v1/perf", {"enabled": bool(enabled)})
+            updated += 1
+        except Exception:
+            continue
+    return updated
+
+
 def idle_due(last_activity: datetime | None, now: datetime | None = None, idle_s: int = DEV_IDLE_S) -> bool:
     if last_activity is None:
         return False
@@ -113,6 +148,25 @@ def disable_all_indexing(registry: "Registry", poster=None) -> int:
         disable_camera_indexing(ip, poster=poster)
         stopped += 1
     return stopped
+
+
+class HighPerfState:
+    """Persisted High performance flag for the registrar UI poll rate."""
+
+    def __init__(self, path: Path = HIGH_PERF_PATH):
+        self.path = path
+        self._lock = threading.Lock()
+        self.enabled = load_high_perf(path)
+
+    def set_enabled(self, enabled: bool) -> bool:
+        with self._lock:
+            self.enabled = bool(enabled)
+            save_high_perf(self.enabled, self.path)
+            return self.enabled
+
+    def snapshot(self) -> bool:
+        with self._lock:
+            return self.enabled
 
 
 class DevState:
@@ -226,9 +280,11 @@ PAGE = """<!DOCTYPE html>
     <label class="meta" for="indexing"><input type="checkbox" id="indexing"> GPT indexing</label>
     <label class="meta" for="jev"><input type="checkbox" id="jev"> JEV indexing</label>
     <label class="meta" for="dev-mode"><input type="checkbox" id="dev-mode"> Dev mode</label>
+    <label class="meta" for="high-perf"><input type="checkbox" id="high-perf"> High performance</label>
     <p class="meta" id="switch-status"></p>
     <p class="meta">JEV indexing runs on the camera. The camera calls TypeSafe. This computer does not.</p>
     <p class="meta">Dev mode turns GPT and JEV indexing off after 5 minutes without interaction. Restarts also start with indexing off.</p>
+    <p class="meta">High performance refreshes the live view every 0.5s. Capture stays at 5 fps so recording and the frame API stay reliable. Leave it off during install.</p>
   </div>
   <div id="transcript"></div>
   <form class="query" id="query-form">
@@ -256,9 +312,16 @@ let noulCamera = null;
 const liveCards = new Map();
 const pausedCameras = new Set();
 const DEV_IDLE_MS = 5 * 60 * 1000;
+const POLL_MS_DEFAULT = 2000;
+const POLL_MS_HIGH_PERF = 500;
+const SWITCH_SYNC_MS = 30000;
 let lastUserActivity = Date.now();
 let idleWatchdog = null;
 let activityPing = null;
+let loadTimer = null;
+let loadBusy = false;
+let highPerfOn = false;
+let lastSwitchSync = 0;
 
 function cameraId() {
   return document.getElementById("camera").value;
@@ -302,6 +365,12 @@ function armIdleWatchdog() {
   }, 15000);
 }
 
+function armLoadTimer() {
+  if (loadTimer) clearInterval(loadTimer);
+  const ms = highPerfOn ? POLL_MS_HIGH_PERF : POLL_MS_DEFAULT;
+  loadTimer = setInterval(load, ms);
+}
+
 async function syncDevMode() {
   const box = document.getElementById("dev-mode");
   const res = await fetch("/api/dev-mode");
@@ -310,6 +379,17 @@ async function syncDevMode() {
   if (!data) return;
   box.checked = !!data.enabled;
   armIdleWatchdog();
+}
+
+async function syncHighPerf() {
+  const box = document.getElementById("high-perf");
+  const res = await fetch("/api/high-perf");
+  if (!res.ok) return;
+  const data = await res.json().catch(() => null);
+  if (!data) return;
+  highPerfOn = !!data.enabled;
+  box.checked = highPerfOn;
+  armLoadTimer();
 }
 
 document.getElementById("dev-mode").addEventListener("change", async (event) => {
@@ -329,6 +409,26 @@ document.getElementById("dev-mode").addEventListener("change", async (event) => 
     false,
   );
   armIdleWatchdog();
+});
+
+document.getElementById("high-perf").addEventListener("change", async (event) => {
+  noteActivity();
+  const enabled = event.target.checked;
+  const res = await fetch("/api/high-perf", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({enabled}),
+  });
+  const data = await res.json().catch(() => ({}));
+  highPerfOn = res.ok ? !!data.enabled : !enabled;
+  event.target.checked = highPerfOn;
+  setSwitchStatus(
+    highPerfOn
+      ? "High performance on. Live view every 0.5s."
+      : "High performance off. Live view every 2s.",
+    false,
+  );
+  armLoadTimer();
 });
 
 ["click", "keydown", "change"].forEach((name) => {
@@ -1131,6 +1231,9 @@ async function removeCamera(camera) {
 }
 
 async function load() {
+  if (loadBusy) return;
+  loadBusy = true;
+  try {
   const res = await fetch("/api/cameras");
   const data = await res.json();
   const hint = document.getElementById("hint");
@@ -1153,11 +1256,16 @@ async function load() {
   hint.textContent = liveCount + " live camera" + (liveCount === 1 ? "" : "s")
     + " · " + data.cameras.length + " registered.";
   syncCameras(data.cameras);
-  syncIndexing(cameraId());
-  syncJev(cameraId());
-  loadNouls(cameraId());
-  const stamp = Date.now();
+  const now = Date.now();
+  if (now - lastSwitchSync >= SWITCH_SYNC_MS) {
+    lastSwitchSync = now;
+    syncIndexing(cameraId());
+    syncJev(cameraId());
+    loadNouls(cameraId());
+  }
+  const stamp = now;
   const seen = new Set();
+  const jobs = [];
   const cards = data.cameras.map((cam) => {
     seen.add(cam.id);
     const card = ensureCard(cam);
@@ -1170,7 +1278,7 @@ async function load() {
     card.frame.classList.toggle("paused", pausedCameras.has(cam.id));
     card.pauseBtn.textContent = pausedCameras.has(cam.id) ? "Resume" : "Pause";
     if (!stale) {
-      refreshFrame(card, cam.id, stamp);
+      jobs.push(refreshFrame(card, cam.id, stamp));
       updateCaption(card, cam.id);
     }
     return card.section;
@@ -1187,10 +1295,16 @@ async function load() {
     list.children.length === cards.length &&
     cards.every((section, index) => list.children[index] === section);
   if (!same) list.replaceChildren(...cards);
+  if (jobs.length) await Promise.all(jobs);
+  } catch (err) {
+  } finally {
+    loadBusy = false;
+  }
 }
 load();
 syncDevMode();
-setInterval(load, 2000);
+syncHighPerf();
+armLoadTimer();
 </script>
 </body>
 </html>
@@ -1560,20 +1674,34 @@ def run_query(ip: str, question: str) -> str:
     return answer_question(question, records, recordings, truncated)
 
 
-def make_handler(registry: Registry, dev_state: DevState | None = None):
+def make_handler(
+    registry: Registry,
+    dev_state: DevState | None = None,
+    high_perf_state: HighPerfState | None = None,
+):
     state = dev_state or DevState()
+    perf_state = high_perf_state or HighPerfState()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args) -> None:
             sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
+        def handle_error(self) -> None:
+            exc = sys.exception()
+            if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+                return
+            super().handle_error()
+
         def _send(self, status: int, body: bytes, content_type: str) -> None:
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
 
         def _json(self, status: int, payload: dict) -> None:
             self._send(status, json.dumps(payload).encode(), "application/json")
@@ -1593,6 +1721,15 @@ def make_handler(registry: Registry, dev_state: DevState | None = None):
                 return
             if path == "/api/dev-mode":
                 self._json(200, self._dev_payload())
+                return
+            if path == "/api/high-perf":
+                self._json(
+                    200,
+                    {
+                        "enabled": perf_state.snapshot(),
+                        "poll_ms": POLL_MS_HIGH_PERF if perf_state.snapshot() else POLL_MS_DEFAULT,
+                    },
+                )
                 return
             if path == "/api/cameras":
                 self._json(200, {"cameras": registry.list()})
@@ -1641,6 +1778,9 @@ def make_handler(registry: Registry, dev_state: DevState | None = None):
             if path.startswith(prefix) and path.endswith("/indexing"):
                 self._indexing_get(path[len(prefix) : -len("/indexing")])
                 return
+            if path.startswith(prefix) and path.endswith("/perf"):
+                self._perf_get(path[len(prefix) : -len("/perf")])
+                return
             if path.startswith(prefix) and path.endswith("/jev"):
                 self._jev_get(path[len(prefix) : -len("/jev")])
                 return
@@ -1657,6 +1797,9 @@ def make_handler(registry: Registry, dev_state: DevState | None = None):
             path = urlparse(self.path).path
             if path == "/api/dev-mode":
                 self._dev_mode_post()
+                return
+            if path == "/api/high-perf":
+                self._high_perf_post()
                 return
             if path == "/api/activity":
                 state.touch()
@@ -1675,6 +1818,10 @@ def make_handler(registry: Registry, dev_state: DevState | None = None):
             if path.startswith(prefix) and path.endswith("/indexing"):
                 state.touch()
                 self._indexing_post(path[len(prefix) : -len("/indexing")])
+                return
+            if path.startswith(prefix) and path.endswith("/perf"):
+                state.touch()
+                self._perf_post(path[len(prefix) : -len("/perf")])
                 return
             if path.startswith(prefix) and path.endswith("/jev"):
                 state.touch()
@@ -1733,6 +1880,31 @@ def make_handler(registry: Registry, dev_state: DevState | None = None):
             payload = self._dev_payload()
             self._json(200, payload)
 
+        def _high_perf_post(self) -> None:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > 256:
+                self._json(400, {"error": "body must be 1 to 256 bytes"})
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+            except json.JSONDecodeError:
+                self._json(400, {"error": "invalid json"})
+                return
+            enabled = body.get("enabled") if isinstance(body, dict) else None
+            if not isinstance(enabled, bool):
+                self._json(400, {"error": "enabled must be a boolean"})
+                return
+            perf_state.set_enabled(enabled)
+            updated = set_cameras_perf(registry, enabled)
+            self._json(
+                200,
+                {
+                    "enabled": perf_state.snapshot(),
+                    "poll_ms": POLL_MS_HIGH_PERF if enabled else POLL_MS_DEFAULT,
+                    "cameras_updated": updated,
+                },
+            )
+
         def _indexing_get(self, camera_id: str) -> None:
             camera = registry.get(camera_id)
             if camera is None:
@@ -1761,6 +1933,35 @@ def make_handler(registry: Registry, dev_state: DevState | None = None):
                 return
             status, raw, ctype = post_authed(camera["ip"], "/api/v1/indexing", {"enabled": enabled})
             self._send_switch(status, raw, ctype, enabled)
+
+        def _perf_get(self, camera_id: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._json(404, {"error": "unknown camera"})
+                return
+            status, body, ctype = fetch_authed(camera["ip"], "/api/v1/perf", 8192)
+            self._send(status, body, ctype if status == 200 else "text/plain")
+
+        def _perf_post(self, camera_id: str) -> None:
+            camera = registry.get(camera_id)
+            if camera is None:
+                self._json(404, {"error": "unknown camera"})
+                return
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > 256:
+                self._json(400, {"error": "body must be 1 to 256 bytes"})
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+            except json.JSONDecodeError:
+                self._json(400, {"error": "invalid json"})
+                return
+            enabled = body.get("enabled") if isinstance(body, dict) else None
+            if not isinstance(enabled, bool):
+                self._json(400, {"error": "enabled must be a boolean"})
+                return
+            status, raw, ctype = post_authed(camera["ip"], "/api/v1/perf", {"enabled": enabled})
+            self._send(status, raw, ctype if status == 200 else "text/plain")
 
         def _jev_get(self, camera_id: str) -> None:
             camera = registry.get(camera_id)
@@ -1928,13 +2129,27 @@ def start_idle_watchdog(registry: Registry, state: DevState, interval_s: float =
     return stop
 
 
-def serve(host: str, port: int, registry: Registry, dev_state: DevState | None = None) -> ThreadingHTTPServer:
+def serve(
+    host: str,
+    port: int,
+    registry: Registry,
+    dev_state: DevState | None = None,
+    high_perf_state: HighPerfState | None = None,
+) -> ThreadingHTTPServer:
     state = dev_state or DevState()
+    perf = high_perf_state or HighPerfState()
     stopped = disable_all_indexing(registry)
     print(f"indexing=off cameras={stopped}", flush=True)
     print(f"dev_mode={'on' if state.enabled else 'off'} idle_s={DEV_IDLE_S}", flush=True)
+    print(
+        f"high_perf={'on' if perf.enabled else 'off'} poll_ms="
+        f"{POLL_MS_HIGH_PERF if perf.enabled else POLL_MS_DEFAULT}",
+        flush=True,
+    )
+    if perf.enabled:
+        set_cameras_perf(registry, True)
     start_idle_watchdog(registry, state)
-    httpd = ThreadingHTTPServer((host, port), make_handler(registry, state))
+    httpd = ThreadingHTTPServer((host, port), make_handler(registry, state, perf))
     httpd.serve_forever()
     return httpd
 
@@ -1993,6 +2208,9 @@ def run_check() -> int:
             or "switch-status" not in page
             or "removeCamera" not in page
             or 'textContent = "Remove"' not in page
+            or "High performance" not in page
+            or 'id="high-perf"' not in page
+            or "POLL_MS_HIGH_PERF" not in page
         ):
             raise SystemExit("page missing title")
         if camera_is_stale({"last_seen": "2000-01-01T00:00:00Z"}) is not True:

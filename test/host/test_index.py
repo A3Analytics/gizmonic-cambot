@@ -104,10 +104,10 @@ def test_motion_is_quiet_on_identical_frames_and_high_when_the_shape_moves():
 def test_keyframe_policy():
     start = T0
     assert keyframe_due(None, start, 0.0) is True
-    assert keyframe_due(start, start + timedelta(seconds=2), 0.9) is False
-    assert keyframe_due(start, start + timedelta(seconds=3), 0.9) is True
-    assert keyframe_due(start, start + timedelta(seconds=4), 0.0) is False
-    assert keyframe_due(start, start + timedelta(seconds=5), 0.0) is True
+    assert keyframe_due(start, start + timedelta(seconds=1), 0.9) is False
+    assert keyframe_due(start, start + timedelta(seconds=1.5), 0.9) is True
+    assert keyframe_due(start, start + timedelta(seconds=1), 0.0) is False
+    assert keyframe_due(start, start + timedelta(seconds=1.5), 0.0) is True
     assert keyframe_due(start, start, 0.0, mark=True) is True
 
 

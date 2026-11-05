@@ -189,37 +189,78 @@ static void free_paths(char **paths, int count) {
 
 typedef void (*frame_fn)(const char *mjpg, uint64_t t_ms, uint32_t offset, uint32_t length, void *ctx);
 
+static void read_idx_file(const char *path, frame_fn fn, void *ctx) {
+    FILE *idx = fopen(path, "rb");
+    if (!idx) {
+        return;
+    }
+    char mjpg[224];
+    size_t len = strlen(path);
+    if (len < 5 || len >= sizeof mjpg) {
+        fclose(idx);
+        return;
+    }
+    memcpy(mjpg, path, len - 4);
+    memcpy(mjpg + len - 4, ".mjpg", 6);
+    uint8_t raw[18];
+    while (fread(raw, 1, sizeof raw, idx) == sizeof raw) {
+        uint64_t t_ms;
+        uint32_t offset, length;
+        memcpy(&t_ms, raw, 8);
+        memcpy(&offset, raw + 8, 4);
+        memcpy(&length, raw + 12, 4);
+        if (t_ms == 0) {
+            continue;
+        }
+        fn(mjpg, t_ms, offset, length, ctx);
+    }
+    fclose(idx);
+}
+
 static void each_synced_frame(frame_fn fn, void *ctx) {
     int count = 0;
     char **paths = list_idx(&count);
     for (int i = 0; i < count; i++) {
-        FILE *idx = fopen(paths[i], "rb");
-        if (!idx) {
-            continue;
-        }
-        char mjpg[224];
-        size_t len = strlen(paths[i]);
-        if (len < 5 || len >= sizeof mjpg) {
-            fclose(idx);
-            continue;
-        }
-        memcpy(mjpg, paths[i], len - 4);
-        memcpy(mjpg + len - 4, ".mjpg", 6);
-        uint8_t raw[18];
-        while (fread(raw, 1, sizeof raw, idx) == sizeof raw) {
-            uint64_t t_ms;
-            uint32_t offset, length;
-            memcpy(&t_ms, raw, 8);
-            memcpy(&offset, raw + 8, 4);
-            memcpy(&length, raw + 12, 4);
-            if (t_ms == 0) {
-                continue;
-            }
-            fn(mjpg, t_ms, offset, length, ctx);
-        }
-        fclose(idx);
+        read_idx_file(paths[i], fn, ctx);
     }
     free_paths(paths, count);
+}
+
+/* Only the hours that overlap [start, end]. A full-card scan blocks the HTTP task. */
+static void each_synced_frame_between(time_t start, time_t end, frame_fn fn, void *ctx) {
+    if (end < start) {
+        return;
+    }
+    time_t hour = start - (start % 3600);
+    time_t last = end - (end % 3600);
+    for (int guard = 0; hour <= last && guard < 48; guard++) {
+        struct tm utc;
+        gmtime_r(&hour, &utc);
+        char path[160];
+        char day[16];
+        char hh[8];
+        strftime(day, sizeof day, "%Y-%m-%d", &utc);
+        strftime(hh, sizeof hh, "%H", &utc);
+        snprintf(path, sizeof path, WITNESS_ROOT "/rec/%s/%s", day, hh);
+        DIR *files = opendir(path);
+        if (files) {
+            struct dirent *file;
+            while ((file = readdir(files)) != NULL) {
+                size_t name_len = strlen(file->d_name);
+                if (name_len < 5 || strcmp(file->d_name + name_len - 4, ".idx") != 0) {
+                    continue;
+                }
+                char full[224];
+                snprintf(full, sizeof full, "%s/%s", path, file->d_name);
+                read_idx_file(full, fn, ctx);
+            }
+            closedir(files);
+        }
+        if (hour > last - 3600) {
+            break;
+        }
+        hour += 3600;
+    }
 }
 
 static bool query_range(httpd_req_t *req, time_t *start, time_t *end) {
@@ -264,7 +305,7 @@ static char *recordings_json(time_t start, time_t end) {
         cJSON_Delete(rows);
         return NULL;
     }
-    each_synced_frame(count_minute, counts);
+    each_synced_frame_between(start, end, count_minute, counts);
     cJSON *item = NULL;
     cJSON_ArrayForEach(item, counts) {
         time_t stamp;
@@ -566,20 +607,40 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
         return result;
     }
     if (strcmp(name, "get_live_frame") == 0 || strcmp(name, "inspect_window") == 0) {
-        SemaphoreHandle_t lock = witness_recorder_lock();
-        if (!lock || xSemaphoreTake(lock, pdMS_TO_TICKS(200)) != pdTRUE) {
-            return tool_result(text_content("camera busy"), true);
-        }
-        camera_fb_t *frame = esp_camera_fb_get();
-        xSemaphoreGive(lock);
-        if (!frame) {
-            return tool_result(text_content("no frame"), true);
+        uint8_t *jpeg = heap_caps_malloc(120 * 1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        size_t jpeg_len = 0;
+        if (!jpeg || !witness_recorder_peek_jpeg(jpeg, 120 * 1024, &jpeg_len) || jpeg_len == 0) {
+            free(jpeg);
+            SemaphoreHandle_t lock = witness_recorder_lock();
+            if (!lock || xSemaphoreTake(lock, pdMS_TO_TICKS(200)) != pdTRUE) {
+                return tool_result(text_content("camera busy"), true);
+            }
+            camera_fb_t *frame = esp_camera_fb_get();
+            xSemaphoreGive(lock);
+            if (!frame) {
+                return tool_result(text_content("no frame"), true);
+            }
+            size_t cap = 0;
+            mbedtls_base64_encode(NULL, 0, &cap, frame->buf, frame->len);
+            unsigned char *encoded = malloc(cap + 1);
+            cJSON *content = cJSON_CreateArray();
+            if (encoded && mbedtls_base64_encode(encoded, cap, &cap, frame->buf, frame->len) == 0) {
+                encoded[cap] = '\0';
+                cJSON *block = cJSON_CreateObject();
+                cJSON_AddStringToObject(block, "type", "image");
+                cJSON_AddStringToObject(block, "mimeType", "image/jpeg");
+                cJSON_AddStringToObject(block, "data", (char *)encoded);
+                cJSON_AddItemToArray(content, block);
+            }
+            free(encoded);
+            esp_camera_fb_return(frame);
+            return tool_result(content, false);
         }
         size_t cap = 0;
-        mbedtls_base64_encode(NULL, 0, &cap, frame->buf, frame->len);
+        mbedtls_base64_encode(NULL, 0, &cap, jpeg, jpeg_len);
         unsigned char *encoded = malloc(cap + 1);
         cJSON *content = cJSON_CreateArray();
-        if (encoded && mbedtls_base64_encode(encoded, cap, &cap, frame->buf, frame->len) == 0) {
+        if (encoded && mbedtls_base64_encode(encoded, cap, &cap, jpeg, jpeg_len) == 0) {
             encoded[cap] = '\0';
             cJSON *block = cJSON_CreateObject();
             cJSON_AddStringToObject(block, "type", "image");
@@ -588,7 +649,7 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
             cJSON_AddItemToArray(content, block);
         }
         free(encoded);
-        esp_camera_fb_return(frame);
+        free(jpeg);
         return tool_result(content, false);
     }
     return tool_result(text_content("unknown tool"), true);
@@ -663,6 +724,50 @@ static esp_err_t indexing_get(httpd_req_t *req) {
     snprintf(body, sizeof body, "{\"enabled\":%s}", witness_indexer_enabled() ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, body);
+}
+
+static void perf_body(char *dst, size_t cap) {
+    snprintf(dst, cap,
+             "{\"enabled\":%s,\"capture_ms\":%u,\"fflush_every\":%u,\"preview_cached\":true}",
+             witness_perf_enabled() ? "true" : "false", witness_perf_capture_ms(),
+             witness_perf_enabled() ? 5u : 1u);
+}
+
+static esp_err_t perf_get(httpd_req_t *req) {
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    char body[128];
+    perf_body(body, sizeof body);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, body);
+}
+
+static esp_err_t perf_post(httpd_req_t *req) {
+    if (!authorized(req)) {
+        deny(req);
+        return ESP_OK;
+    }
+    char *raw = read_body(req);
+    cJSON *body = raw ? cJSON_Parse(raw) : NULL;
+    free(raw);
+    cJSON *flag = body ? cJSON_GetObjectItem(body, "enabled") : NULL;
+    if (!cJSON_IsBool(flag)) {
+        cJSON_Delete(body);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "enabled must be a boolean");
+        return ESP_OK;
+    }
+    if (!witness_perf_set_enabled(cJSON_IsTrue(flag))) {
+        cJSON_Delete(body);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store perf state");
+        return ESP_OK;
+    }
+    cJSON_Delete(body);
+    char reply[128];
+    perf_body(reply, sizeof reply);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, reply);
 }
 
 static esp_err_t indexing_post(httpd_req_t *req) {
@@ -1186,6 +1291,8 @@ void witness_http_register(httpd_handle_t server, const char *token) {
         {.uri = "/api/v1/index/latest", .method = HTTP_GET, .handler = latest_get},
         {.uri = "/api/v1/indexing", .method = HTTP_GET, .handler = indexing_get},
         {.uri = "/api/v1/indexing", .method = HTTP_POST, .handler = indexing_post},
+        {.uri = "/api/v1/perf", .method = HTTP_GET, .handler = perf_get},
+        {.uri = "/api/v1/perf", .method = HTTP_POST, .handler = perf_post},
         {.uri = "/api/v1/jev", .method = HTTP_GET, .handler = jev_get},
         {.uri = "/api/v1/jev", .method = HTTP_POST, .handler = jev_post},
         {.uri = "/api/v1/nouls", .method = HTTP_GET, .handler = nouls_get},

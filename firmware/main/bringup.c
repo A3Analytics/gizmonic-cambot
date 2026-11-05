@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esp_camera.h"
@@ -178,6 +179,19 @@ static esp_err_t frame_get(httpd_req_t *req) {
         return httpd_resp_sendstr(req, "unauthorized\n");
     }
 
+    /* Prefer the recorder's last JPEG so preview does not steal the sensor. */
+    size_t cached_len = 0;
+    uint8_t *cached = heap_caps_malloc(120 * 1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (cached && witness_recorder_peek_jpeg(cached, 120 * 1024, &cached_len) && cached_len > 0) {
+        httpd_resp_set_type(req, "image/jpeg");
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+        httpd_resp_set_hdr(req, "X-Witness-Preview", "cached");
+        esp_err_t err = httpd_resp_send(req, (const char *)cached, (ssize_t)cached_len);
+        free(cached);
+        return err;
+    }
+    free(cached);
+
     xSemaphoreTake(camera_lock, portMAX_DELAY);
     camera_fb_t *frame = NULL;
     for (int i = 0; i < 5; i++) {
@@ -203,6 +217,7 @@ static esp_err_t frame_get(httpd_req_t *req) {
     }
     httpd_resp_set_type(req, "image/jpeg");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "X-Witness-Preview", "live");
     esp_err_t err = httpd_resp_send(req, (const char *)frame->buf, (ssize_t)frame->len);
     esp_camera_fb_return(frame);
     xSemaphoreGive(camera_lock);

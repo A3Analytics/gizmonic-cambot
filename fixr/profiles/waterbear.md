@@ -166,3 +166,7 @@ Follow `fixr/SETUP.md` from S3. Expect one port with kind `ttl`. Stop after
 two failed attempts at the same step and report what you saw. Update
 `install_notes` in the profile with `ok`, `failed`, `skipped`, or `untested`,
 and rebuild with `docs/build.sh` if you changed `fixr/SETUP.md` or a document under `docs/src`.
+
+After S6 verify succeeds, an agent may turn on **High performance** in the
+registrar UI for a snappier live view. If frame fetch or recording checks fail,
+turn it off and stop. Do not enable it during install steps S1–S6.

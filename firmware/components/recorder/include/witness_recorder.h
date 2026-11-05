@@ -27,5 +27,13 @@ void witness_http_register(httpd_handle_t server, const char *bearer_token);
 bool witness_sd_ready(void);
 SemaphoreHandle_t witness_recorder_lock(void);
 
+/* Copy the newest recorded JPEG for preview. False until the first frame. */
+bool witness_recorder_peek_jpeg(uint8_t *dst, size_t cap, size_t *out_len);
+
+/* High-performance capture mode. Boots disabled when the SD flag is absent. */
+bool witness_perf_enabled(void);
+bool witness_perf_set_enabled(bool enabled);
+unsigned witness_perf_capture_ms(void);
+
 /* Copy the newest index record. Returns false when the card has none yet. */
 bool witness_index_copy_latest(char *dst, size_t cap);

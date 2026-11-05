@@ -33,8 +33,10 @@ guess a time zone, a scene description, or a model endpoint.
 `registrar/serve.py` is a small web app on this computer. When a camera boots
 and can reach the LAN, it POSTs its identity to `/api/register`. The page
 lists the camera and reloads `GET /api/v1/frame.jpg` from the camera every two
-seconds. The registrar uses the TCP source address as the camera's IP, so the
-message cannot point the viewer at some other host.
+seconds by default. The **High performance** switch on the page drops that to
+0.5 s and leaves capture at 5 fps; leave it off during install. The registrar
+uses the TCP source address as the camera's IP, so
+the message cannot point the viewer at some other host.
 
 The body is specified in
 [`schema/camera-registration.schema.json`](schema/camera-registration.schema.json).
@@ -51,6 +53,16 @@ stays assigned to `en0`. The process prints the address it detected.
 
 ```bash
 /opt/homebrew/bin/python3.13 fixr/registrar/serve.py --check
+```
+
+To check that JEV scores keep reaching the page, run the watch script with
+the registrar up. It turns JEV on, polls the way the page does, prints every
+new score and the longest gap, then turns JEV and GPT indexing off. It calls
+TypeSafe about once every 1.7 s while it runs.
+
+```bash
+.venv/bin/python test/hil/jev_watch.py --seconds 60 --poll 0.5 \
+  --registrar http://127.0.0.1:8765 --serial /dev/cu.usbserial-210
 ```
 
 Runtime state is written under `fixr/run/`, which is gitignored. If
