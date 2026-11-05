@@ -3,6 +3,7 @@
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 
 #include <dirent.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -43,6 +44,9 @@ static bool high_perf;
 static unsigned capture_ms = 200;
 static unsigned fflush_every = 1;
 static unsigned since_fflush;
+#define MINUTE_SLOTS 720
+static uint16_t minute_frames[MINUTE_SLOTS];
+static time_t minute_at[MINUTE_SLOTS];
 
 bool witness_sd_ready(void) {
     return sd_ready;
@@ -288,7 +292,41 @@ static bool append_jpeg(const uint8_t *jpeg, size_t len, uint16_t motion_milli, 
         *frame_out = seg_frame;
     }
     seg_frame++;
+    if (synced) {
+        time_t minute = time(NULL);
+        minute -= minute % 60;
+        unsigned slot = (unsigned)((minute / 60) % MINUTE_SLOTS);
+        if (minute_at[slot] != minute) {
+            minute_at[slot] = minute;
+            minute_frames[slot] = 0;
+        }
+        if (minute_frames[slot] < UINT16_MAX) {
+            minute_frames[slot]++;
+        }
+    }
     return true;
+}
+
+int witness_recorder_minutes(time_t start, time_t end, time_t *minutes, uint16_t *frames, int cap) {
+    int count = 0;
+    time_t minute;
+    if (!minutes || !frames || cap <= 0 || end < start) {
+        return 0;
+    }
+    minute = start - (start % 60);
+    if (end - minute > (time_t)MINUTE_SLOTS * 60) {
+        minute = end - (end % 60) - (time_t)(MINUTE_SLOTS - 1) * 60;
+    }
+    for (; minute <= end - (end % 60) && count < cap; minute += 60) {
+        unsigned slot = (unsigned)((minute / 60) % MINUTE_SLOTS);
+        if (minute_at[slot] != minute || minute_frames[slot] == 0) {
+            continue;
+        }
+        minutes[count] = minute;
+        frames[count] = minute_frames[slot];
+        count++;
+    }
+    return count;
 }
 
 static void recorder_task(void *arg) {

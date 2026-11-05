@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 
 #include "cJSON.h"
@@ -21,6 +22,9 @@
 /* About 9 hours of JEV at one frame every 1.6 s. */
 #define BUDGET_FRAMES 20000
 #define EVENTS_EVERY_S 10
+/* Newest records, kept in RAM so a question does not scan the card.
+ * Scanning on the HTTP task made the camera unreachable for minutes. */
+#define RECENT_MAX 400
 #define QUESTION_MAX 8
 #define EXAMPLE_MAX 4
 #define ALERT_SLOTS 16
@@ -153,6 +157,84 @@ static void remember_latest(const char *json) {
     }
     snprintf(latest, sizeof latest, "%s", json);
     xSemaphoreGive(latest_lock);
+}
+
+static char *recent_lines[RECENT_MAX];
+static int recent_pos;
+static int recent_count;
+static SemaphoreHandle_t recent_lock;
+
+static void remember_recent(const char *json) {
+    char *copy = heap_caps_malloc(strlen(json) + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!copy) {
+        copy = malloc(strlen(json) + 1);
+    }
+    if (!copy) {
+        return;
+    }
+    memcpy(copy, json, strlen(json) + 1);
+    if (!recent_lock || xSemaphoreTake(recent_lock, pdMS_TO_TICKS(200)) != pdTRUE) {
+        free(copy);
+        return;
+    }
+    free(recent_lines[recent_pos]);
+    recent_lines[recent_pos] = copy;
+    recent_pos = (recent_pos + 1) % RECENT_MAX;
+    if (recent_count < RECENT_MAX) {
+        recent_count++;
+    }
+    xSemaphoreGive(recent_lock);
+}
+
+char *witness_index_recent_json(const char *query) {
+    const char **match = malloc(RECENT_MAX * sizeof(char *));
+    int found = 0;
+    size_t bytes = 3;
+    char *out;
+    char *cursor;
+    if (!match) {
+        return NULL;
+    }
+    if (!recent_lock || xSemaphoreTake(recent_lock, pdMS_TO_TICKS(200)) != pdTRUE) {
+        free(match);
+        return NULL;
+    }
+    int start = (recent_pos - recent_count + RECENT_MAX) % RECENT_MAX;
+    for (int i = 0; i < recent_count; i++) {
+        const char *line = recent_lines[(start + i) % RECENT_MAX];
+        if (!line) {
+            continue;
+        }
+        if (query && query[0] && strcasestr(line, query) == NULL) {
+            continue;
+        }
+        match[found++] = line;
+        bytes += strlen(line) + 1;
+    }
+    out = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!out) {
+        out = malloc(bytes);
+    }
+    if (!out) {
+        xSemaphoreGive(recent_lock);
+        free(match);
+        return NULL;
+    }
+    cursor = out;
+    *cursor++ = '[';
+    for (int i = 0; i < found; i++) {
+        size_t len = strlen(match[i]);
+        if (i > 0) {
+            *cursor++ = ',';
+        }
+        memcpy(cursor, match[i], len);
+        cursor += len;
+    }
+    *cursor++ = ']';
+    *cursor = '\0';
+    xSemaphoreGive(recent_lock);
+    free(match);
+    return out;
 }
 
 static int fits(const char *text, size_t cap) {
@@ -801,9 +883,11 @@ static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, c
     mkdir(dir, 0775);
     char path[192];
     snprintf(path, sizeof path, "%s/%s.jsonl", dir, hour);
-    if (append_line(path, printed) && strlen(printed) < sizeof latest) {
+    append_line(path, printed);
+    if (strlen(printed) < sizeof latest) {
         remember_latest(printed);
     }
+    remember_recent(printed);
     printf("index=ok t=%s motion_milli=%u model=%s\n", iso, (unsigned)item->motion_milli,
            caption ? "openai" : "jev");
     free(printed);
@@ -956,6 +1040,7 @@ void witness_indexer_start(void) {
     load_jev_enabled();
     printf("index=%s jev=%s\n", index_enabled ? "started" : "stopped", jev_enabled ? "started" : "stopped");
     latest_lock = xSemaphoreCreateMutex();
+    recent_lock = xSemaphoreCreateMutex();
     keyframes = xQueueCreate(PENDING, sizeof(keyframe_t));
     if (!keyframes) {
         printf("index=fail err=queue\n");

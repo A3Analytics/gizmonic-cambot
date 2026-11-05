@@ -37,3 +37,9 @@ unsigned witness_perf_capture_ms(void);
 
 /* Copy the newest index record. Returns false when the card has none yet. */
 bool witness_index_copy_latest(char *dst, size_t cap);
+
+/* JSON array of the newest index records kept in RAM. Caller frees it. */
+char *witness_index_recent_json(const char *query);
+
+/* Minute frame counts kept in RAM since boot. Returns how many minutes were written. */
+int witness_recorder_minutes(time_t start, time_t end, time_t *minutes, uint16_t *frames, int cap);

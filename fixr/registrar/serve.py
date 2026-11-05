@@ -1594,8 +1594,8 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
         note = f"Only the newest {INDEX_LIMIT} keyframes are included.\n"
     prompt = (
         "You answer questions about a single Witness camera using only the keyframe index below.\n"
-        "Each record is one keyframe. The camera writes one on the first frame, then every 3 seconds "
-        "while the scene is moving, and about every 5 seconds when it is still.\n"
+        "Each record is one keyframe. The camera writes one on the first frame, then about every "
+        "1.5 seconds.\n"
         "Record times are UTC. Answer in America/Los_Angeles local time, and say how long ago that was "
         f"relative to the current time, {now}.\n"
         "GPT captions may be empty when GPT indexing is off. That does not mean nothing was seen.\n"
@@ -1643,22 +1643,15 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
 
 
 def load_index(ip: str) -> tuple[list[dict], bool]:
-    """Pull index rows for Ask and charts.
+    """Pull the camera's recent index rows for Ask and charts.
 
-    Older camera builds filled heap on an empty search and never reached today's
-    JEV lines, so merge an unfiltered pull with a typesafe-filtered one.
+    One search. The camera keeps these rows in RAM; a second pass, or a pass
+    over the card, held its only HTTP task and the live view went offline.
     """
-    by_t: dict[str, dict] = {}
-    truncated = False
-    for query in ("", "typesafe"):
-        try:
-            rows, cut = index_records(mcp_call(ip, "search_index", {"query": query}))
-        except QueryError:
-            continue
-        truncated = truncated or cut
-        for row in rows:
-            by_t[str(row["t"])] = row
-    rows = sorted(by_t.values(), key=lambda row: str(row["t"]))
+    try:
+        rows, truncated = index_records(mcp_call(ip, "search_index", {"query": ""}))
+    except QueryError:
+        return [], False
     if len(rows) > INDEX_LIMIT:
         rows = rows[-INDEX_LIMIT:]
         truncated = True
@@ -1668,7 +1661,7 @@ def load_index(ip: str) -> tuple[list[dict], bool]:
 def run_query(ip: str, question: str) -> str:
     records, truncated = load_index(ip)
     try:
-        recordings = mcp_call(ip, "list_recordings", {"from": "-6h", "to": "-0s"})
+        recordings = mcp_call(ip, "list_recordings", {"from": "-30m", "to": "-0s"})
     except QueryError:
         recordings = ""
     return answer_question(question, records, recordings, truncated)

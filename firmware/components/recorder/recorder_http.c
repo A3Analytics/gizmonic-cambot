@@ -51,57 +51,6 @@ static int cmp_path(const void *left, const void *right) {
     return strcmp(*(char *const *)left, *(char *const *)right);
 }
 
-#define SEARCH_INDEX_MAX 200
-
-static char **list_index_files(int *count) {
-    *count = 0;
-    int cap = 0;
-    char **paths = NULL;
-    DIR *days = opendir(WITNESS_ROOT "/index");
-    if (!days) {
-        return NULL;
-    }
-    struct dirent *day;
-    while ((day = readdir(days)) != NULL) {
-        if (day->d_name[0] == '.') {
-            continue;
-        }
-        char day_path[192];
-        snprintf(day_path, sizeof day_path, WITNESS_ROOT "/index/%s", day->d_name);
-        DIR *hours = opendir(day_path);
-        if (!hours) {
-            continue;
-        }
-        struct dirent *hour;
-        while ((hour = readdir(hours)) != NULL) {
-            size_t name_len = strlen(hour->d_name);
-            if (name_len < 7 || strcmp(hour->d_name + name_len - 6, ".jsonl") != 0) {
-                continue;
-            }
-            if (*count == cap) {
-                cap = cap ? cap * 2 : 8;
-                char **grown = realloc(paths, (size_t)cap * sizeof(char *));
-                if (!grown) {
-                    closedir(hours);
-                    closedir(days);
-                    goto done;
-                }
-                paths = grown;
-            }
-            char full[224];
-            snprintf(full, sizeof full, "%s/%s", day_path, hour->d_name);
-            paths[(*count)++] = strdup(full);
-        }
-        closedir(hours);
-    }
-    closedir(days);
-done:
-    if (paths && *count > 1) {
-        qsort(paths, (size_t)*count, sizeof(char *), cmp_path);
-    }
-    return paths;
-}
-
 static char **list_idx(int *count) {
     *count = 0;
     int cap = 0;
@@ -226,43 +175,6 @@ static void each_synced_frame(frame_fn fn, void *ctx) {
     free_paths(paths, count);
 }
 
-/* Only the hours that overlap [start, end]. A full-card scan blocks the HTTP task. */
-static void each_synced_frame_between(time_t start, time_t end, frame_fn fn, void *ctx) {
-    if (end < start) {
-        return;
-    }
-    time_t hour = start - (start % 3600);
-    time_t last = end - (end % 3600);
-    for (int guard = 0; hour <= last && guard < 48; guard++) {
-        struct tm utc;
-        gmtime_r(&hour, &utc);
-        char path[160];
-        char day[16];
-        char hh[8];
-        strftime(day, sizeof day, "%Y-%m-%d", &utc);
-        strftime(hh, sizeof hh, "%H", &utc);
-        snprintf(path, sizeof path, WITNESS_ROOT "/rec/%s/%s", day, hh);
-        DIR *files = opendir(path);
-        if (files) {
-            struct dirent *file;
-            while ((file = readdir(files)) != NULL) {
-                size_t name_len = strlen(file->d_name);
-                if (name_len < 5 || strcmp(file->d_name + name_len - 4, ".idx") != 0) {
-                    continue;
-                }
-                char full[224];
-                snprintf(full, sizeof full, "%s/%s", path, file->d_name);
-                read_idx_file(full, fn, ctx);
-            }
-            closedir(files);
-        }
-        if (hour > last - 3600) {
-            break;
-        }
-        hour += 3600;
-    }
-}
-
 static bool query_range(httpd_req_t *req, time_t *start, time_t *end) {
     char query[256];
     char from[80];
@@ -278,51 +190,37 @@ static bool query_range(httpd_req_t *req, time_t *start, time_t *end) {
     return witness_parse_bound(from, now, start) && witness_parse_bound(to, now, end);
 }
 
-static void count_minute(const char *mjpg, uint64_t t_ms, uint32_t offset, uint32_t length, void *ctx) {
-    (void)mjpg;
-    (void)offset;
-    (void)length;
-    cJSON *object = ctx;
-    time_t sec = (time_t)(t_ms / 1000);
-    struct tm utc;
-    gmtime_r(&sec, &utc);
-    char key[40];
-    strftime(key, sizeof key, "%Y-%m-%dT%H:%M:00.000Z", &utc);
-    cJSON *item = cJSON_GetObjectItem(object, key);
-    if (!item) {
-        cJSON_AddNumberToObject(object, key, 1);
-    } else {
-        item->valuedouble += 1;
-        item->valueint += 1;
-    }
-}
-
 static char *recordings_json(time_t start, time_t end) {
-    cJSON *counts = cJSON_CreateObject();
-    cJSON *rows = cJSON_CreateArray();
-    if (!counts || !rows) {
-        cJSON_Delete(counts);
-        cJSON_Delete(rows);
+    /* Counts kept in RAM. Reading the card here blocked the only HTTP task
+     * and the live view failed until the scan finished. */
+    time_t *minutes = malloc(720 * sizeof(time_t));
+    uint16_t *frames = malloc(720 * sizeof(uint16_t));
+    if (!minutes || !frames) {
+        free(minutes);
+        free(frames);
         return NULL;
     }
-    each_synced_frame_between(start, end, count_minute, counts);
-    cJSON *item = NULL;
-    cJSON_ArrayForEach(item, counts) {
-        time_t stamp;
-        if (!item->string || !witness_parse_bound(item->string, time(NULL), &stamp)) {
-            continue;
-        }
-        if (stamp < start || stamp > end) {
-            continue;
-        }
+    int count = witness_recorder_minutes(start, end, minutes, frames, 720);
+    cJSON *rows = cJSON_CreateArray();
+    if (!rows) {
+        free(minutes);
+        free(frames);
+        return NULL;
+    }
+    for (int i = 0; i < count; i++) {
+        struct tm utc;
+        char stamp[40];
         cJSON *row = cJSON_CreateObject();
-        cJSON_AddStringToObject(row, "minute", item->string);
-        cJSON_AddNumberToObject(row, "frames", item->valuedouble);
+        gmtime_r(&minutes[i], &utc);
+        strftime(stamp, sizeof stamp, "%Y-%m-%dT%H:%M:00.000Z", &utc);
+        cJSON_AddStringToObject(row, "minute", stamp);
+        cJSON_AddNumberToObject(row, "frames", frames[i]);
         cJSON_AddItemToArray(rows, row);
     }
     char *printed = cJSON_PrintUnformatted(rows);
     cJSON_Delete(rows);
-    cJSON_Delete(counts);
+    free(minutes);
+    free(frames);
     return printed;
 }
 
@@ -568,40 +466,8 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
     }
     if (strcmp(name, "search_index") == 0) {
         const char *query = cJSON_GetStringValue(cJSON_GetObjectItem(arguments, "query"));
-        cJSON *rows = cJSON_CreateArray();
-        char *line = malloc(4096);
-        int file_count = 0;
-        char **files = list_index_files(&file_count);
-        /* Keep only the newest SEARCH_INDEX_MAX matches so old GPT captions cannot
-         * exhaust heap before today's JEV watch rows are reached. */
-        for (int i = 0; line && files && i < file_count; i++) {
-            FILE *file = fopen(files[i], "r");
-            if (!file) {
-                continue;
-            }
-            while (fgets(line, 4096, file)) {
-                if (query && query[0] && strcasestr(line, query) == NULL) {
-                    continue;
-                }
-                cJSON *row = cJSON_Parse(line);
-                if (!row) {
-                    continue;
-                }
-                cJSON_AddItemToArray(rows, row);
-                while (cJSON_GetArraySize(rows) > SEARCH_INDEX_MAX) {
-                    cJSON *drop = cJSON_DetachItemFromArray(rows, 0);
-                    cJSON_Delete(drop);
-                }
-            }
-            fclose(file);
-        }
-        for (int i = 0; files && i < file_count; i++) {
-            free(files[i]);
-        }
-        free(files);
-        free(line);
-        char *printed = cJSON_PrintUnformatted(rows);
-        cJSON_Delete(rows);
+        /* RAM only. The card scan ran on the HTTP task and took the camera offline. */
+        char *printed = witness_index_recent_json(query);
         cJSON *result = tool_result(text_content(printed ? printed : "[]"), false);
         free(printed);
         return result;

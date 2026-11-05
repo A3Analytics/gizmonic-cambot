@@ -414,6 +414,24 @@ def test_set_cameras_perf_posts_enabled():
     assert seen == [("10.0.0.1", "/api/v1/perf", {"enabled": True})]
 
 
+def test_query_reads_recent_index_once(monkeypatch):
+    """Ask must not walk hours of card. One recent search, then a short recording window."""
+    from fixr.registrar import serve
+
+    calls = []
+
+    def fake_mcp(ip, name, arguments):
+        calls.append((ip, name, arguments))
+        return "[]"
+
+    monkeypatch.setattr(serve, "mcp_call", fake_mcp)
+    monkeypatch.setattr(serve, "answer_question", lambda *args, **kwargs: "seen once")
+    assert serve.run_query("10.0.0.8", "was the tip seen?") == "seen once"
+    assert [name for _, name, _ in calls] == ["search_index", "list_recordings"]
+    assert calls[0][2] == {"query": ""}
+    assert calls[1][2] == {"from": "-30m", "to": "-0s"}
+
+
 def test_caption_proxy_passes_every_new_jev_score(stack):
     """Each new on-camera record must reach the page; none cached or repeated."""
     base = stack["base"]
