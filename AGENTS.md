@@ -1,7 +1,8 @@
 # Agent instructions
 
-This repository is the Witness camera specification. Firmware, CAD, and the
-`witness` command described in the documents do not exist here yet.
+This repository is the Witness camera specification, the bring-up firmware in
+`firmware/`, and the printable case in `hardware/`. The `witness` command
+described in the documents does not exist here yet.
 
 ## Which document to follow
 
@@ -12,6 +13,11 @@ This repository is the Witness camera specification. Firmware, CAD, and the
   milestone M2; until then, say so instead of inventing commands.
 - Designing or changing the case and mounts: `docs/src/astra-mechanical-spec.md`.
   Dimensions marked TBV are not confirmed. Do not replace them with guesses.
+- Printing the case: `hardware/witness-minimum-petg-kit/README.md` lists the
+  plates, parts, PETG settings, hardware, and assembly. Its STL, STEP, and 3MF
+  files are a frozen release checked by `manifest.json`. To change a part, edit
+  the generator under `source/`, regenerate, and update the exports and
+  checksums together.
 - Firmware, API, storage format, or repository layout: `docs/src/firmware-repo-plan.md`.
   Section 13 of that plan is the contributor rule set for the future firmware
   repository.
