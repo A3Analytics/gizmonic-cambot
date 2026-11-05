@@ -1,0 +1,27 @@
+{
+  "lengths": [
+    25,
+    50
+  ],
+  "rod_d": 16,
+  "spigot_d": 12,
+  "fit_radial": 0.2,
+  "engagement_min": 20,
+  "spigot_length": 24,
+  "socket_depth": 25,
+  "socket_d": 20,
+  "socket_floor": 4,
+  "tip_chamfer": 1,
+  "locking_pilot_d": 2.8,
+  "locking_boss_width": 11,
+  "locking_boss_height": 10,
+  "locking_boss_outer_y": 14,
+  "locking_z_from_mouth": 12,
+  "finger_t": 3,
+  "finger_gap": 3.2,
+  "finger_r": 7.5,
+  "finger_reach": 9,
+  "bolt_d": 5.3,
+  "nut_af": 8.1,
+  "nut_depth": 4
+}

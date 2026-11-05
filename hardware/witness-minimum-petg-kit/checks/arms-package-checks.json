@@ -1,0 +1,61 @@
+{
+  "checks": [
+    "3MF ZIP/XML structure",
+    "millimeter units",
+    "closed, consistently wound, positive-volume single-component meshes",
+    "bed contact at Z0",
+    "group plate bounds and bounding-box separation"
+  ],
+  "files": [
+    {
+      "file": "fit_socket_6-32.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "fit_spigot.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "plate_first_arm_25.3mf",
+      "objects": 2,
+      "status": "pass"
+    },
+    {
+      "file": "plate_socket_fit.3mf",
+      "objects": 2,
+      "status": "pass"
+    },
+    {
+      "file": "rod_female_25_6-32.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "rod_female_50_6-32.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "rod_female_75_6-32.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "rod_male_25.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "rod_male_50.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "rod_male_75.3mf",
+      "objects": 1,
+      "status": "pass"
+    }
+  ]
+}

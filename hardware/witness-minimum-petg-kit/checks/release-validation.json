@@ -1,0 +1,63 @@
+{
+  "checks": [
+    "3MF ZIP/XML",
+    "millimeter units",
+    "closed consistently wound meshes with positive volume",
+    "bed contact",
+    "180 mm plate bounds and object separation",
+    "export checksums"
+  ],
+  "physical_tests": false,
+  "files": [
+    {
+      "file": "3mf/dual_magnet_foot.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "3mf/housing_v3.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "3mf/retainer_v3_short.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "3mf/rod_female_25_6-32.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "3mf/rod_female_50_6-32.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "3mf/rod_male_25.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "3mf/rod_male_50.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "plates/01_case_and_short_retainer.3mf",
+      "objects": 2,
+      "status": "pass"
+    },
+    {
+      "file": "plates/02_arms_25_and_50.3mf",
+      "objects": 4,
+      "status": "pass"
+    },
+    {
+      "file": "plates/03_dual_magnet_foot.3mf",
+      "objects": 1,
+      "status": "pass"
+    }
+  ]
+}

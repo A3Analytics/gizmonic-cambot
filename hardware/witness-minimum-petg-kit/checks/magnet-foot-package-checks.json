@@ -1,0 +1,16 @@
+{
+  "checks": [
+    "3MF ZIP/XML structure",
+    "millimeter units",
+    "closed, consistently wound, positive-volume single-component meshes",
+    "bed contact at Z0",
+    "group plate bounds and bounding-box separation"
+  ],
+  "files": [
+    {
+      "file": "dual_magnet_foot.3mf",
+      "objects": 1,
+      "status": "pass"
+    }
+  ]
+}

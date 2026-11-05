@@ -1,0 +1,26 @@
+{
+  "checks": [
+    "3MF ZIP/XML structure",
+    "millimeter units",
+    "closed, consistently wound, positive-volume single-component meshes",
+    "bed contact at Z0",
+    "group plate bounds and bounding-box separation"
+  ],
+  "files": [
+    {
+      "file": "housing_v3.3mf",
+      "objects": 1,
+      "status": "pass"
+    },
+    {
+      "file": "plate_housing_v3_and_short_retainer.3mf",
+      "objects": 2,
+      "status": "pass"
+    },
+    {
+      "file": "retainer_v3_short.3mf",
+      "objects": 1,
+      "status": "pass"
+    }
+  ]
+}

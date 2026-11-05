@@ -1,0 +1,17 @@
+{
+  "finger_t": 3,
+  "finger_gap": 3.2,
+  "finger_r": 7.5,
+  "finger_reach": 9,
+  "bolt_d": 5.3,
+  "nut_af": 8.1,
+  "nut_depth": 4,
+  "magnet_spacing": 56,
+  "magnet_d": 22,
+  "plate_w": 32,
+  "plate_h": 88,
+  "plate_t": 6,
+  "m4_clearance": 4.5,
+  "washer_recess_d": 14,
+  "washer_recess_depth": 2
+}

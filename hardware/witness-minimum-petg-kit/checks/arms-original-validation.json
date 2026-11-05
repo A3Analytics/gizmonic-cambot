@@ -1,0 +1,100 @@
+{
+  "parts": [
+    {
+      "part": "rod_male_25",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        65.49670627381596,
+        16.0,
+        16.0
+      ],
+      "volume_mm3": 8949.868196727599
+    },
+    {
+      "part": "rod_female_25_6-32",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        65.49670627381596,
+        23.998881018102733,
+        19.99552432283504
+      ],
+      "volume_mm3": 12487.505205312875
+    },
+    {
+      "part": "rod_male_50",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        90.49670627381596,
+        16.0,
+        16.0
+      ],
+      "volume_mm3": 13973.9149799695
+    },
+    {
+      "part": "rod_female_50_6-32",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        90.49670627381596,
+        23.998881018102733,
+        19.99552432283504
+      ],
+      "volume_mm3": 17511.61589076144
+    },
+    {
+      "part": "rod_male_75",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        115.49670627381596,
+        16.0,
+        16.0
+      ],
+      "volume_mm3": 18997.961763211406
+    },
+    {
+      "part": "rod_female_75_6-32",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        115.49670627381596,
+        23.998881018102733,
+        19.99552432283504
+      ],
+      "volume_mm3": 22535.72657621
+    },
+    {
+      "part": "fit_spigot",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        32.0,
+        15.998209628964375,
+        15.996419458268027
+      ],
+      "volume_mm3": 4298.69585892216
+    },
+    {
+      "part": "fit_socket_6-32",
+      "watertight": true,
+      "mesh_components": 1,
+      "dimensions_mm": [
+        32.0,
+        23.998881018102733,
+        19.99552432283504
+      ],
+      "volume_mm3": 7133.939665142657
+    }
+  ],
+  "minimum_insertion_mm": 20,
+  "radial_sliding_clearance_mm": 0.2,
+  "mating_solid_overlap_mm3": 0,
+  "shortest_pair_pivot_distance_mm": [
+    92,
+    96
+  ],
+  "physical_fit_or_load_tested": false
+}

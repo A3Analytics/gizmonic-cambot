@@ -1,0 +1,41 @@
+{
+  "board_drop_sweep_intersection_mm3": 0,
+  "header_drop_sweep_intersection_mm3": 0,
+  "bracket_vs_board_mm3": 0,
+  "bracket_vs_tray_mm3": 0,
+  "header_model": "3.2 x 64.6 x 8.5 mm per row; spans beyond both PCB ends; unmeasured",
+  "board_lift_gap_mm": 0.2,
+  "physical_fit_tested": false,
+  "bracket_vs_front_solder_tail_envelopes_mm3": 0,
+  "antenna_vs_housing_mm3": 0,
+  "antenna_vs_retainer_mm3": 0,
+  "snap_hook_engagement_mm": 0.4,
+  "snap_flexure_physical_tested": false,
+  "retainer_bridge_clear_of_antenna_mm": 2.5,
+  "retainer_shortened_mm": 7.299999999999997,
+  "bridge_inner_edge_beyond_case_mm": 0.5,
+  "support_count": 2,
+  "retainer_lift_0_5mm_catch_interference_mm3": 0.9599999999999933,
+  "parts": [
+    {
+      "part": "housing_v3",
+      "watertight": true,
+      "solid_count": 1,
+      "print_dimensions_mm": [
+        33.79670627381596,
+        71.0,
+        38.0
+      ]
+    },
+    {
+      "part": "retainer_v3_short",
+      "watertight": true,
+      "solid_count": 1,
+      "print_dimensions_mm": [
+        42.8,
+        69.80000000000001,
+        4.499999999999998
+      ]
+    }
+  ]
+}

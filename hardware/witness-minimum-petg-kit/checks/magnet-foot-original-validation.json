@@ -1,0 +1,16 @@
+{
+  "solid_count": 1,
+  "watertight": true,
+  "print_dimensions_mm": [
+    22.49670627381596,
+    101.0,
+    32.0
+  ],
+  "magnet_spacing_mm": 56,
+  "m4_clearance_mm": 4.5,
+  "material_below_washer_mm": 4,
+  "existing_mate_intersection_mm3": 0.0,
+  "physical_fit_tested": false,
+  "load_tested": false,
+  "magnet_thread_gender_and_length_verified": false
+}
