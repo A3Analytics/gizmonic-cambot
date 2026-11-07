@@ -1,4 +1,4 @@
-#include "witness_recorder.h"
+#include "cambot_recorder.h"
 
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 
@@ -15,8 +15,8 @@
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "mbedtls/base64.h"
-#include "witness_clock.h"
-#include "witness_time.h"
+#include "cambot_clock.h"
+#include "cambot_time.h"
 
 static const char *bearer;
 
@@ -55,7 +55,7 @@ static char **list_idx(int *count) {
     *count = 0;
     int cap = 0;
     char **paths = NULL;
-    DIR *days = opendir(WITNESS_ROOT "/rec");
+    DIR *days = opendir(CAMBOT_ROOT "/rec");
     if (!days) {
         return NULL;
     }
@@ -65,7 +65,7 @@ static char **list_idx(int *count) {
             continue;
         }
         char day_path[160];
-        snprintf(day_path, sizeof day_path, WITNESS_ROOT "/rec/%s", day->d_name);
+        snprintf(day_path, sizeof day_path, CAMBOT_ROOT "/rec/%s", day->d_name);
         DIR *hours = opendir(day_path);
         if (!hours) {
             char idx[192];
@@ -187,7 +187,7 @@ static bool query_range(httpd_req_t *req, time_t *start, time_t *end) {
         return false;
     }
     time_t now = time(NULL);
-    return witness_parse_bound(from, now, start) && witness_parse_bound(to, now, end);
+    return cambot_parse_bound(from, now, start) && cambot_parse_bound(to, now, end);
 }
 
 static char *recordings_json(time_t start, time_t end) {
@@ -200,7 +200,7 @@ static char *recordings_json(time_t start, time_t end) {
         free(frames);
         return NULL;
     }
-    int count = witness_recorder_minutes(start, end, minutes, frames, 720);
+    int count = cambot_recorder_minutes(start, end, minutes, frames, 720);
     cJSON *rows = cJSON_CreateArray();
     if (!rows) {
         free(minutes);
@@ -309,7 +309,7 @@ static esp_err_t frame_at_get(httpd_req_t *req) {
     }
     url_decode(stamp);
     time_t when;
-    if (!witness_parse_bound(stamp, time(NULL), &when)) {
+    if (!cambot_parse_bound(stamp, time(NULL), &when)) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad time");
         return ESP_OK;
     }
@@ -387,8 +387,8 @@ static esp_err_t status_get(httpd_req_t *req) {
     char body[192];
     snprintf(body, sizeof body,
              "{\"time_synced\":%s,\"recording\":%s,\"sd\":\"%s\"}",
-             witness_time_synced() ? "true" : "false", witness_sd_ready() ? "true" : "false",
-             witness_sd_ready() ? "ok" : "none");
+             cambot_time_synced() ? "true" : "false", cambot_sd_ready() ? "true" : "false",
+             cambot_sd_ready() ? "ok" : "none");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, body);
 }
@@ -439,8 +439,8 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
     if (strcmp(name, "get_status") == 0) {
         char body[192];
         snprintf(body, sizeof body, "{\"time_synced\":%s,\"recording\":%s,\"sd\":\"%s\"}",
-                 witness_time_synced() ? "true" : "false", witness_sd_ready() ? "true" : "false",
-                 witness_sd_ready() ? "ok" : "none");
+                 cambot_time_synced() ? "true" : "false", cambot_sd_ready() ? "true" : "false",
+                 cambot_sd_ready() ? "ok" : "none");
         return tool_result(text_content(body), false);
     }
     if (strcmp(name, "make_clip") == 0) {
@@ -457,7 +457,7 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
         const char *from = cJSON_GetStringValue(cJSON_GetObjectItem(arguments, "from"));
         const char *to = cJSON_GetStringValue(cJSON_GetObjectItem(arguments, "to"));
         time_t start, end, now = time(NULL);
-        if (!from || !to || !witness_parse_bound(from, now, &start) || !witness_parse_bound(to, now, &end)) {
+        if (!from || !to || !cambot_parse_bound(from, now, &start) || !cambot_parse_bound(to, now, &end)) {
             return tool_result(text_content("[]"), true);
         }
         char *printed = recordings_json(start, end);
@@ -468,7 +468,7 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
     if (strcmp(name, "search_index") == 0) {
         const char *query = cJSON_GetStringValue(cJSON_GetObjectItem(arguments, "query"));
         /* RAM only. The card scan ran on the HTTP task and took the camera offline. */
-        char *printed = witness_index_recent_json(query);
+        char *printed = cambot_index_recent_json(query);
         cJSON *result = tool_result(text_content(printed ? printed : "[]"), false);
         free(printed);
         return result;
@@ -478,7 +478,7 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
         cJSON *limit_item = arguments ? cJSON_GetObjectItem(arguments, "limit") : NULL;
         int limit = limit_item && cJSON_IsNumber(limit_item) ? limit_item->valueint : 40;
         /* One short page. The registrar walks these; the live view is served between calls. */
-        char *printed = witness_index_read_page(cursor ? cursor : "", limit);
+        char *printed = cambot_index_read_page(cursor ? cursor : "", limit);
         if (!printed) {
             return tool_result(text_content("index page failed"), true);
         }
@@ -489,9 +489,9 @@ static cJSON *call_tool(const char *name, cJSON *arguments) {
     if (strcmp(name, "get_live_frame") == 0 || strcmp(name, "inspect_window") == 0) {
         uint8_t *jpeg = heap_caps_malloc(120 * 1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         size_t jpeg_len = 0;
-        if (!jpeg || !witness_recorder_peek_jpeg(jpeg, 120 * 1024, &jpeg_len) || jpeg_len == 0) {
+        if (!jpeg || !cambot_recorder_peek_jpeg(jpeg, 120 * 1024, &jpeg_len) || jpeg_len == 0) {
             free(jpeg);
-            SemaphoreHandle_t lock = witness_recorder_lock();
+            SemaphoreHandle_t lock = cambot_recorder_lock();
             if (!lock || xSemaphoreTake(lock, pdMS_TO_TICKS(200)) != pdTRUE) {
                 return tool_result(text_content("camera busy"), true);
             }
@@ -566,7 +566,7 @@ static esp_err_t mcp_post(httpd_req_t *req) {
         cJSON_AddItemToObject(caps, "tools", cJSON_CreateObject());
         cJSON_AddItemToObject(result, "capabilities", caps);
         cJSON *info = cJSON_CreateObject();
-        cJSON_AddStringToObject(info, "name", "witness");
+        cJSON_AddStringToObject(info, "name", "cambot");
         cJSON_AddStringToObject(info, "version", "0.1.0");
         cJSON_AddItemToObject(result, "serverInfo", info);
         cJSON_AddItemToObject(response, "result", result);
@@ -601,7 +601,7 @@ static esp_err_t indexing_get(httpd_req_t *req) {
         return ESP_OK;
     }
     char body[32];
-    snprintf(body, sizeof body, "{\"enabled\":%s}", witness_indexer_enabled() ? "true" : "false");
+    snprintf(body, sizeof body, "{\"enabled\":%s}", cambot_indexer_enabled() ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, body);
 }
@@ -609,8 +609,8 @@ static esp_err_t indexing_get(httpd_req_t *req) {
 static void perf_body(char *dst, size_t cap) {
     snprintf(dst, cap,
              "{\"enabled\":%s,\"capture_ms\":%u,\"fflush_every\":%u,\"preview_cached\":true}",
-             witness_perf_enabled() ? "true" : "false", witness_perf_capture_ms(),
-             witness_perf_enabled() ? 5u : 1u);
+             cambot_perf_enabled() ? "true" : "false", cambot_perf_capture_ms(),
+             cambot_perf_enabled() ? 5u : 1u);
 }
 
 static esp_err_t perf_get(httpd_req_t *req) {
@@ -638,7 +638,7 @@ static esp_err_t perf_post(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "enabled must be a boolean");
         return ESP_OK;
     }
-    if (!witness_perf_set_enabled(cJSON_IsTrue(flag))) {
+    if (!cambot_perf_set_enabled(cJSON_IsTrue(flag))) {
         cJSON_Delete(body);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store perf state");
         return ESP_OK;
@@ -664,14 +664,14 @@ static esp_err_t indexing_post(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "enabled must be a boolean");
         return ESP_OK;
     }
-    if (!witness_indexer_set_enabled(cJSON_IsTrue(flag))) {
+    if (!cambot_indexer_set_enabled(cJSON_IsTrue(flag))) {
         cJSON_Delete(body);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store indexing state");
         return ESP_OK;
     }
     cJSON_Delete(body);
     char reply[32];
-    snprintf(reply, sizeof reply, "{\"enabled\":%s}", witness_indexer_enabled() ? "true" : "false");
+    snprintf(reply, sizeof reply, "{\"enabled\":%s}", cambot_indexer_enabled() ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, reply);
 }
@@ -687,7 +687,7 @@ static esp_err_t latest_get(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not read index");
         return ESP_OK;
     }
-    if (!witness_index_copy_latest(body, 4096)) {
+    if (!cambot_index_copy_latest(body, 4096)) {
         free(body);
         httpd_resp_set_status(req, "204 No Content");
         return httpd_resp_send(req, "", 0);
@@ -704,7 +704,7 @@ static esp_err_t jev_get(httpd_req_t *req) {
         return ESP_OK;
     }
     char body[32];
-    snprintf(body, sizeof body, "{\"enabled\":%s}", witness_jev_enabled() ? "true" : "false");
+    snprintf(body, sizeof body, "{\"enabled\":%s}", cambot_jev_enabled() ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, body);
 }
@@ -723,14 +723,14 @@ static esp_err_t jev_post(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "enabled must be a boolean");
         return ESP_OK;
     }
-    if (!witness_jev_set_enabled(cJSON_IsTrue(flag))) {
+    if (!cambot_jev_set_enabled(cJSON_IsTrue(flag))) {
         cJSON_Delete(body);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store jev state");
         return ESP_OK;
     }
     cJSON_Delete(body);
     char reply[32];
-    snprintf(reply, sizeof reply, "{\"enabled\":%s}", witness_jev_enabled() ? "true" : "false");
+    snprintf(reply, sizeof reply, "{\"enabled\":%s}", cambot_jev_enabled() ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, reply);
 }
@@ -960,7 +960,7 @@ static esp_err_t nouls_get(httpd_req_t *req) {
         deny(req);
         return ESP_OK;
     }
-    file = fopen(WITNESS_NOULS_JSON, "rb");
+    file = fopen(CAMBOT_NOULS_JSON, "rb");
     if (!file) {
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_sendstr(req, "[]");
@@ -1007,8 +1007,8 @@ static esp_err_t nouls_put(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store nouls");
         return ESP_OK;
     }
-    mkdir(WITNESS_ROOT, 0775);
-    file = fopen(WITNESS_NOULS_JSON ".tmp", "wb");
+    mkdir(CAMBOT_ROOT, 0775);
+    file = fopen(CAMBOT_NOULS_JSON ".tmp", "wb");
     if (!file || fputs(printed, file) < 0) {
         if (file) {
             fclose(file);
@@ -1019,8 +1019,8 @@ static esp_err_t nouls_put(httpd_req_t *req) {
     }
     fclose(file);
     free(printed);
-    remove(WITNESS_NOULS_JSON);
-    if (rename(WITNESS_NOULS_JSON ".tmp", WITNESS_NOULS_JSON) != 0) {
+    remove(CAMBOT_NOULS_JSON);
+    if (rename(CAMBOT_NOULS_JSON ".tmp", CAMBOT_NOULS_JSON) != 0) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not store nouls");
         return ESP_OK;
     }
@@ -1065,7 +1065,7 @@ static int example_ids(const httpd_req_t *req, char *name, size_t name_cap, char
 }
 
 static void example_path(const char *name, const char *id, char *path, size_t cap) {
-    snprintf(path, cap, WITNESS_ROOT "/nouls/%s/%s.jpg", name, id);
+    snprintf(path, cap, CAMBOT_ROOT "/nouls/%s/%s.jpg", name, id);
 }
 
 static esp_err_t noul_example_get(httpd_req_t *req) {
@@ -1096,7 +1096,7 @@ static esp_err_t noul_example_get(httpd_req_t *req) {
         return ESP_OK;
     }
     size = ftell(file);
-    if (size <= 0 || (size_t)size > WITNESS_NOUL_JPEG_MAX || fseek(file, 0, SEEK_SET) != 0) {
+    if (size <= 0 || (size_t)size > CAMBOT_NOUL_JPEG_MAX || fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
         return ESP_OK;
@@ -1134,16 +1134,16 @@ static esp_err_t noul_example_put(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "example path is invalid");
         return ESP_OK;
     }
-    body = read_body_limit(req, WITNESS_NOUL_JPEG_MAX);
+    body = read_body_limit(req, CAMBOT_NOUL_JPEG_MAX);
     len = body ? (size_t)req->content_len : 0;
     if (!body || len < 3 || (unsigned char)body[0] != 0xff || (unsigned char)body[1] != 0xd8) {
         free(body);
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "example must be a JPEG under 80KB");
         return ESP_OK;
     }
-    mkdir(WITNESS_ROOT, 0775);
-    mkdir(WITNESS_ROOT "/nouls", 0775);
-    snprintf(dir, sizeof dir, WITNESS_ROOT "/nouls/%s", name);
+    mkdir(CAMBOT_ROOT, 0775);
+    mkdir(CAMBOT_ROOT "/nouls", 0775);
+    snprintf(dir, sizeof dir, CAMBOT_ROOT "/nouls/%s", name);
     mkdir(dir, 0775);
     example_path(name, id, path, sizeof path);
     file = fopen(path, "wb");
@@ -1161,7 +1161,7 @@ static esp_err_t noul_example_put(httpd_req_t *req) {
     return httpd_resp_sendstr(req, "{\"ok\":true}");
 }
 
-void witness_http_register(httpd_handle_t server, const char *token) {
+void cambot_http_register(httpd_handle_t server, const char *token) {
     bearer = token;
     httpd_uri_t routes[] = {
         {.uri = "/api/v1/status", .method = HTTP_GET, .handler = status_get},

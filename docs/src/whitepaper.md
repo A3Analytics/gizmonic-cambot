@@ -1,7 +1,7 @@
 ---
-title: "Witness: an open, $20 camera that remembers what your robots did"
+title: "Gizmonic Cambot: an open, $20 camera that remembers what your robots did"
 subtitle: "White paper · semantically indexed video for AI monitoring of robots and lab equipment"
-author: "Witness project (working name) · open hardware and open source"
+author: "Gizmonic Cambot · open hardware and open source"
 date: "Draft 0.1 · October 2026"
 ---
 
@@ -12,7 +12,7 @@ drops a part, a mobile base clips a table leg. Video of the event usually exists
 only if someone happened to be recording, and even then no one wants to scrub
 through hours of footage to find the four seconds that matter.
 
-**Witness** is an open-source camera built from a roughly $12 ESP32-S3 camera
+**Gizmonic Cambot** is an open-source camera built from a roughly $12 ESP32-S3 camera
 board, a microSD card and a 3D-printed case. It records continuously into a
 rolling buffer on the card, uses a cloud vision model to build a searchable
 index of what happened, and answers questions in plain language:
@@ -45,7 +45,7 @@ things make visual monitoring of them harder than it should be:
 
 ## The concept
 
-Witness is designed to be cheap enough to leave on every machine:
+Cambot is designed to be cheap enough to leave on every machine:
 
 - **Records everything locally.** About 5 frames per second at 800×600 by
   default, stored as one-minute segments with a per-frame time index. When the
@@ -133,10 +133,10 @@ reports the estimated cost first when a scan would exceed it.
 
 | Interface | Used by | What it offers |
 |---|---|---|
-| Web UI at `http://witness-xxxx.local/` | People | Live view, timeline, ask box, settings |
+| Web UI at `http://cambot-xxxx.local/` | People | Live view, timeline, ask box, settings |
 | REST `/api/v1/...` | Scripts, robot controllers | Status, frames, clips, index search, ask, marks, config |
 | MCP `/mcp` | Cursor and other agents | The same tools the on-board agent uses |
-| `witness` CLI | Setup and bulk work | Flash, provision Wi-Fi, discover, ask, pull clips, export MP4 |
+| `cambot` CLI | Setup and bulk work | Flash, provision Wi-Fi, discover, ask, pull clips, export MP4 |
 
 ## Example uses
 
@@ -209,7 +209,7 @@ reports what has been used.
 
 - Video stays on the SD card. Images go only to the model endpoint the owner
   configures, and only when indexing or answering. Captioning can be switched off
-  entirely, turning Witness into a plain local recorder.
+  entirely, turning Cambot into a plain local recorder.
 - The model endpoint can be any OpenAI-compatible server, including a model
   running on the local network, so no images need to leave the building.
 - The API requires a bearer token created during setup. The camera makes only
@@ -244,7 +244,7 @@ reports what has been used.
 
 1. **M0–M1:** Board bring-up, SD rolling buffer, live view, REST API (porting the
    working camera code from the Lloyd robot project).
-2. **M2:** Wi-Fi provisioning, `witness` CLI, browser-based flasher, and the
+2. **M2:** Wi-Fi provisioning, `cambot` CLI, browser-based flasher, and the
    agent-readable setup guide.
 3. **M3:** Activity detection, captioning, watch lists, robot marks, and index
    search.

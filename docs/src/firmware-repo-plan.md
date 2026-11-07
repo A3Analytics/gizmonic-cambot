@@ -1,7 +1,7 @@
 ---
-title: "Witness: open-source software repository plan"
+title: "Gizmonic Cambot: open-source software repository plan"
 subtitle: "On-board firmware, agent, API and CLI for the ESP32-S3 camera"
-author: "Witness project · Apache-2.0"
+author: "Gizmonic Cambot project · Apache-2.0"
 date: "Plan rev A · October 2026"
 ---
 
@@ -22,10 +22,10 @@ exposure to the public internet, enterprise Wi-Fi.
 
 ## 2. Repository layout
 
-One monorepo, `witness-cam`, so firmware, CLI, docs and CAD release together.
+One monorepo, `gizmonic-cambot`, so firmware, CLI, docs and CAD release together.
 
 ```text
-witness-cam/
+gizmonic-cambot/
 ├── README.md              what it is, photos, quick start
 ├── AGENTS.md              rules and entry points for coding agents
 ├── fixr/                  setup guide, per-computer profiles, registrar
@@ -51,7 +51,7 @@ witness-cam/
 │   ├── webui/             small static UI (Preact), packed into LittleFS
 │   ├── partitions.csv
 │   └── sdkconfig.defaults[.board]
-├── cli/                   Python package `witness-cli` (command `witness`)
+├── cli/                   Python package `cambot-cli` (command `cambot`)
 ├── hardware/              CAD source, STEP, STL and 3MF from Astra; PARTS.md
 ├── docs/                  white paper, API (OpenAPI 3.1), index format, MCP tools
 ├── flasher/               ESP Web Tools page and manifest (GitHub Pages)
@@ -63,7 +63,7 @@ witness-cam/
 ```
 
 **Why ESP-IDF rather than Arduino.** The Lloyd prototype used Arduino, which
-was fine for one endpoint. Witness needs explicit task priorities and core
+was fine for one endpoint. Cambot needs explicit task priorities and core
 pinning, the IDF HTTP server with several concurrent sockets, the SDMMC and FATFS
 tuning knobs, HTTPS OTA with rollback, and NVS encryption. The prototype's
 working camera settings (pin map, `CAMERA_GRAB_LATEST`, OV3660 white-balance
@@ -98,7 +98,7 @@ Documented in `docs/storage-format.md` and versioned, so other tools can read a
 card directly.
 
 ```text
-/witness/
+/cambot/
   card.json                         card id, format version, camera id
   rec/2026-10-29/19/
     2026-10-29T19-04-00Z.mjpg       concatenated JPEG frames, 60 s
@@ -189,7 +189,7 @@ The full OpenAPI 3.1 document lives in `docs/api.yaml`.
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/v1/ping` | `{"ok":true,"id":"witness-ab12","fw":"0.3.0"}` (no auth; used by discovery) |
+| `GET /api/v1/ping` | `{"ok":true,"id":"cambot-ab12","fw":"0.3.0"}` (no auth; used by discovery) |
 | `GET /api/v1/status` | Wi-Fi, time sync, SD, recording, budget, version |
 | `GET /api/v1/frame.jpg` | Current frame |
 | `GET /api/v1/stream` | Live MJPEG (multipart) |
@@ -213,34 +213,34 @@ Times are accepted as RFC 3339, as local wall time (`12:00`, interpreted in
 
 - **Serial (default, agent-friendly).** The firmware speaks the open **Improv
   Wi-Fi serial** protocol on the TTL UART at 115200, plus a line-based JSON
-  console (`{"cmd":"wifi.set",...}`) for everything else. `witness provision`
+  console (`{"cmd":"wifi.set",...}`) for everything else. `cambot provision`
   wraps both.
 - **Browser flasher.** ESP Web Tools on GitHub Pages flashes the board and runs
   Improv in Chrome or Edge, with no installs.
 - **SoftAP fallback.** With no stored network, or after holding BOOT for 5 s,
-  the camera opens `Witness-Setup-AB12` with a portal at `192.168.4.1`.
-- **Identity.** The hostname `witness-<last 4 hex of MAC>` is advertised over
-  mDNS as `_http._tcp` and `_witness._tcp`, with TXT `id`, `fw` and `board`.
+  the camera opens `Cambot-Setup-AB12` with a portal at `192.168.4.1`.
+- **Identity.** The hostname `cambot-<last 4 hex of MAC>` is advertised over
+  mDNS as `_http._tcp` and `_cambot._tcp`, with TXT `id`, `fw` and `board`.
 - **Token.** Generated at first provisioning and returned once over serial to
   the CLI, which stores it in the OS keychain. It can be rotated with
-  `witness token rotate`.
+  `cambot token rotate`.
 
 Log lines use the `key=value` style from the prototype (`wifi=ip=...`,
 `sd=ok size_gb=29.7`, `time=synced`) so people and agents can grep them.
 
-## 10. `witness` CLI (Python)
+## 10. `cambot` CLI (Python)
 
 | Command | Does |
 |---|---|
-| `witness doctor` | Checks Python, esptool, ports, drivers and ffmpeg, then prints fixes |
-| `witness ports` | Lists serial ports and labels them TTL (CH340, VID 1a86) or OTG (VID 303a) |
-| `witness flash [--port] [--board]` | Downloads the release, then runs esptool at 115200 on TTL |
-| `witness provision --ssid` | Improv Wi-Fi. The password comes from `WITNESS_WIFI_PASSWORD` or a hidden prompt. Saves the token. |
-| `witness discover` | Finds cameras over mDNS, then checks each with `/ping` |
-| `witness status/ask/pull/export` | API wrappers; `export` produces MP4 with ffmpeg |
-| `witness config set/get` | Config. `-` reads a secret from stdin. |
-| `witness mcp-config` | Prints a ready `.cursor/mcp.json` entry |
-| `witness logs` | Tails the TTL serial log |
+| `cambot doctor` | Checks Python, esptool, ports, drivers and ffmpeg, then prints fixes |
+| `cambot ports` | Lists serial ports and labels them TTL (CH340, VID 1a86) or OTG (VID 303a) |
+| `cambot flash [--port] [--board]` | Downloads the release, then runs esptool at 115200 on TTL |
+| `cambot provision --ssid` | Improv Wi-Fi. The password comes from `CAMBOT_WIFI_PASSWORD` or a hidden prompt. Saves the token. |
+| `cambot discover` | Finds cameras over mDNS, then checks each with `/ping` |
+| `cambot status/ask/pull/export` | API wrappers; `export` produces MP4 with ffmpeg |
+| `cambot config set/get` | Config. `-` reads a secret from stdin. |
+| `cambot mcp-config` | Prints a ready `.cursor/mcp.json` entry |
+| `cambot logs` | Tails the TTL serial log |
 
 ## 11. Testing and CI
 

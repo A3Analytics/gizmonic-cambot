@@ -1,6 +1,6 @@
-#include "witness_alert.h"
+#include "cambot_alert.h"
 
-int witness_alert_edge(int *previous_hit, double score, int when_yes) {
+int cambot_alert_edge(int *previous_hit, double score, int when_yes) {
     int yes;
     int hit;
     int send;

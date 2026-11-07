@@ -10,7 +10,7 @@
     "id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$",
-      "description": "Camera name, typically witness- plus the last 4 hex digits of the MAC."
+      "description": "Camera name, typically cambot- plus the last 4 hex digits of the MAC."
     },
     "ip": {
       "type": "string",

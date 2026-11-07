@@ -1,5 +1,5 @@
-#include "witness_llm.h"
-#include "witness_llm_client.h"
+#include "cambot_llm.h"
+#include "cambot_llm_client.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -9,13 +9,13 @@
 #include "esp_log.h"
 #include "mbedtls/base64.h"
 
-static const char *TAG = "witness.llm";
+static const char *TAG = "cambot.llm";
 
-esp_err_t witness_llm_drivers_ready(void) {
+esp_err_t cambot_llm_drivers_ready(void) {
     return ESP_OK;
 }
 
-esp_err_t witness_llm_openai(const char *api_key, const char *base_url, const char *model, const uint8_t *jpeg,
+esp_err_t cambot_llm_openai(const char *api_key, const char *base_url, const char *model, const uint8_t *jpeg,
                              size_t jpeg_len, const char *prompt, char *out, size_t out_cap) {
     if (!api_key || api_key[0] == '\0' || !out || out_cap < 2) {
         return ESP_ERR_INVALID_ARG;

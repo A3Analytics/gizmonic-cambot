@@ -1,4 +1,4 @@
-#include "witness_recorder.h"
+#include "cambot_recorder.h"
 
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 
@@ -17,11 +17,11 @@
 #include "freertos/task.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
-#include "witness_gray.h"
-#include "witness_idx.h"
-#include "witness_keyframe.h"
-#include "witness_motion.h"
-#include "witness_time.h"
+#include "cambot_gray.h"
+#include "cambot_idx.h"
+#include "cambot_keyframe.h"
+#include "cambot_motion.h"
+#include "cambot_time.h"
 
 static bool sd_ready;
 static SemaphoreHandle_t camera_lock;
@@ -48,15 +48,15 @@ static unsigned since_fflush;
 static uint16_t minute_frames[MINUTE_SLOTS];
 static time_t minute_at[MINUTE_SLOTS];
 
-bool witness_sd_ready(void) {
+bool cambot_sd_ready(void) {
     return sd_ready;
 }
 
-SemaphoreHandle_t witness_recorder_lock(void) {
+SemaphoreHandle_t cambot_recorder_lock(void) {
     return camera_lock;
 }
 
-bool witness_recorder_peek_jpeg(uint8_t *dst, size_t cap, size_t *out_len) {
+bool cambot_recorder_peek_jpeg(uint8_t *dst, size_t cap, size_t *out_len) {
     if (!dst || !out_len || !preview_lock) {
         return false;
     }
@@ -72,11 +72,11 @@ bool witness_recorder_peek_jpeg(uint8_t *dst, size_t cap, size_t *out_len) {
     return ok;
 }
 
-bool witness_perf_enabled(void) {
+bool cambot_perf_enabled(void) {
     return high_perf;
 }
 
-unsigned witness_perf_capture_ms(void) {
+unsigned cambot_perf_capture_ms(void) {
     return capture_ms;
 }
 
@@ -89,12 +89,12 @@ static void apply_perf(bool enabled) {
     since_fflush = 0;
 }
 
-bool witness_perf_set_enabled(bool enabled) {
+bool cambot_perf_set_enabled(bool enabled) {
     if (!sd_ready) {
         apply_perf(enabled);
         return true;
     }
-    FILE *file = fopen(WITNESS_ROOT "/high_perf", "w");
+    FILE *file = fopen(CAMBOT_ROOT "/high_perf", "w");
     if (!file) {
         return false;
     }
@@ -107,7 +107,7 @@ bool witness_perf_set_enabled(bool enabled) {
 
 static void load_perf(void) {
     /* Absent file = install-safe defaults. */
-    FILE *file = fopen(WITNESS_ROOT "/high_perf", "r");
+    FILE *file = fopen(CAMBOT_ROOT "/high_perf", "r");
     if (!file) {
         apply_perf(false);
         return;
@@ -135,7 +135,7 @@ static void close_segment(void) {
 
 static void delete_hour(const char *day, const char *hour) {
     char path[160];
-    snprintf(path, sizeof path, WITNESS_ROOT "/rec/%s/%s", day, hour);
+    snprintf(path, sizeof path, CAMBOT_ROOT "/rec/%s/%s", day, hour);
     DIR *dir = opendir(path);
     if (!dir) {
         return;
@@ -151,7 +151,7 @@ static void delete_hour(const char *day, const char *hour) {
     }
     closedir(dir);
     rmdir(path);
-    snprintf(path, sizeof path, WITNESS_ROOT "/rec/%s", day);
+    snprintf(path, sizeof path, CAMBOT_ROOT "/rec/%s", day);
     rmdir(path);
 }
 
@@ -162,7 +162,7 @@ static void evict_oldest(void) {
     }
     int guard = 0;
     while (free_bytes * 100 < total * 10 && guard < 8) {
-        DIR *days = opendir(WITNESS_ROOT "/rec");
+        DIR *days = opendir(CAMBOT_ROOT "/rec");
         if (!days) {
             return;
         }
@@ -174,7 +174,7 @@ static void evict_oldest(void) {
                 continue;
             }
             char day_path[160];
-            snprintf(day_path, sizeof day_path, WITNESS_ROOT "/rec/%s", day->d_name);
+            snprintf(day_path, sizeof day_path, CAMBOT_ROOT "/rec/%s", day->d_name);
             DIR *hours = opendir(day_path);
             if (!hours) {
                 continue;
@@ -209,8 +209,8 @@ static bool open_segment(bool synced) {
     close_segment();
     char path[192];
     if (!synced) {
-        mkdir(WITNESS_ROOT "/rec/unsynced", 0775);
-        snprintf(path, sizeof path, WITNESS_ROOT "/rec/unsynced/unsynced");
+        mkdir(CAMBOT_ROOT "/rec/unsynced", 0775);
+        snprintf(path, sizeof path, CAMBOT_ROOT "/rec/unsynced/unsynced");
         seg_unsynced = true;
         seg_minute = 0;
     } else {
@@ -223,10 +223,10 @@ static bool open_segment(bool synced) {
         strftime(hour, sizeof hour, "%H", &utc);
         strftime(name, sizeof name, "%Y-%m-%dT%H-%M-%SZ", &utc);
         char dir[160];
-        snprintf(dir, sizeof dir, WITNESS_ROOT "/rec/%s", day);
-        mkdir(WITNESS_ROOT "/rec", 0775);
+        snprintf(dir, sizeof dir, CAMBOT_ROOT "/rec/%s", day);
+        mkdir(CAMBOT_ROOT "/rec", 0775);
         mkdir(dir, 0775);
-        snprintf(dir, sizeof dir, WITNESS_ROOT "/rec/%s/%s", day, hour);
+        snprintf(dir, sizeof dir, CAMBOT_ROOT "/rec/%s/%s", day, hour);
         mkdir(dir, 0775);
         snprintf(path, sizeof path, "%s/%s", dir, name);
         seg_unsynced = false;
@@ -244,12 +244,12 @@ static bool open_segment(bool synced) {
         return false;
     }
     long idx_size = ftell(seg_idx);
-    seg_frame = idx_size > 0 ? (uint32_t)(idx_size / WITNESS_IDX_SIZE) : 0;
+    seg_frame = idx_size > 0 ? (uint32_t)(idx_size / CAMBOT_IDX_SIZE) : 0;
     return true;
 }
 
 static bool append_jpeg(const uint8_t *jpeg, size_t len, uint16_t motion_milli, uint32_t *frame_out) {
-    bool synced = witness_time_synced();
+    bool synced = cambot_time_synced();
     time_t minute = 0;
     if (synced) {
         time_t now = time(NULL);
@@ -276,9 +276,9 @@ static bool append_jpeg(const uint8_t *jpeg, size_t len, uint16_t motion_milli, 
         close_segment();
         return false;
     }
-    uint8_t raw[WITNESS_IDX_SIZE];
+    uint8_t raw[CAMBOT_IDX_SIZE];
     uint64_t t_ms = synced ? (uint64_t)time(NULL) * 1000 : 0;
-    if (witness_idx_encode(raw, sizeof raw, t_ms, (uint32_t)offset, (uint32_t)len, motion_milli) < 0) {
+    if (cambot_idx_encode(raw, sizeof raw, t_ms, (uint32_t)offset, (uint32_t)len, motion_milli) < 0) {
         return false;
     }
     fwrite(raw, 1, sizeof raw, seg_idx);
@@ -307,7 +307,7 @@ static bool append_jpeg(const uint8_t *jpeg, size_t len, uint16_t motion_milli, 
     return true;
 }
 
-int witness_recorder_minutes(time_t start, time_t end, time_t *minutes, uint16_t *frames, int cap) {
+int cambot_recorder_minutes(time_t start, time_t end, time_t *minutes, uint16_t *frames, int cap) {
     int count = 0;
     time_t minute;
     if (!minutes || !frames || cap <= 0 || end < start) {
@@ -366,29 +366,29 @@ static void recorder_task(void *arg) {
                 uint16_t motion = 0;
                 size_t gray_len = 0;
                 if (prev_gray && curr_gray &&
-                    witness_gray_eighth(copy_buf, len, curr_gray, 48 * 1024, &gray_len) == ESP_OK && gray_len > 0) {
-                    motion = witness_motion_milli(prev_gray_len == gray_len ? prev_gray : NULL, curr_gray, gray_len);
+                    cambot_gray_eighth(copy_buf, len, curr_gray, 48 * 1024, &gray_len) == ESP_OK && gray_len > 0) {
+                    motion = cambot_motion_milli(prev_gray_len == gray_len ? prev_gray : NULL, curr_gray, gray_len);
                     memcpy(prev_gray, curr_gray, gray_len);
                     prev_gray_len = gray_len;
                 }
                 uint32_t frame_index = seg_frame;
-                bool synced = witness_time_synced();
+                bool synced = cambot_time_synced();
                 append_jpeg(copy_buf, len, motion, &frame_index);
                 /* Keyframes go to the indexer even when the SD write failed, so the
                  * live score keeps updating. */
                 if (synced) {
                     int64_t now_ms = esp_timer_get_time() / 1000;
                     int64_t elapsed = have_keyframe ? now_ms - last_keyframe_ms : 0;
-                    if (witness_keyframe_due(have_keyframe, elapsed, motion, false)) {
+                    if (cambot_keyframe_due(have_keyframe, elapsed, motion, false)) {
                         have_keyframe = true;
                         last_keyframe_ms = now_ms;
-                        witness_indexer_submit(copy_buf, len, time(NULL), motion, frame_index, seg_name);
+                        cambot_indexer_submit(copy_buf, len, time(NULL), motion, frame_index, seg_name);
                     }
                 }
                 frames++;
                 if (frames == 1 || frames % 300 == 0) {
                     printf("recording=ok frames=%u synced=%s perf=%s internal_free=%u internal_block=%u\n", frames,
-                           witness_time_synced() ? "yes" : "no", high_perf ? "on" : "off",
+                           cambot_time_synced() ? "yes" : "no", high_perf ? "on" : "off",
                            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA),
                            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));
                 }
@@ -418,10 +418,10 @@ static esp_err_t mount_sd(void) {
         printf("sd=none err=%d\n", (int)err);
         return err;
     }
-    mkdir(WITNESS_ROOT, 0775);
-    mkdir(WITNESS_ROOT "/rec", 0775);
-    mkdir(WITNESS_ROOT "/index", 0775);
-    FILE *meta = fopen(WITNESS_ROOT "/card.json", "w");
+    mkdir(CAMBOT_ROOT, 0775);
+    mkdir(CAMBOT_ROOT "/rec", 0775);
+    mkdir(CAMBOT_ROOT "/index", 0775);
+    FILE *meta = fopen(CAMBOT_ROOT "/card.json", "w");
     if (meta) {
         fputs("{\"format\":1}\n", meta);
         fclose(meta);
@@ -433,14 +433,14 @@ static esp_err_t mount_sd(void) {
     return ESP_OK;
 }
 
-esp_err_t witness_recorder_start(SemaphoreHandle_t lock) {
+esp_err_t cambot_recorder_start(SemaphoreHandle_t lock) {
     camera_lock = lock;
     preview_lock = xSemaphoreCreateMutex();
     if (mount_sd() != ESP_OK) {
         return ESP_FAIL;
     }
     load_perf();
-    witness_indexer_start();
+    cambot_indexer_start();
     if (xTaskCreatePinnedToCore(recorder_task, "recorder", 16384, NULL, 4, NULL, 1) != pdPASS &&
         xTaskCreate(recorder_task, "recorder", 16384, NULL, 4, NULL) != pdPASS) {
         printf("recording=fail err=task\n");

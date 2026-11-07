@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from host.witness_models.anthropic import ANTHROPIC_VERSION, AnthropicAdapter
-from host.witness_models.errors import ModelCallError
-from host.witness_models.http import HttpResponse
+from host.cambot_models.anthropic import ANTHROPIC_VERSION, AnthropicAdapter
+from host.cambot_models.errors import ModelCallError
+from host.cambot_models.http import HttpResponse
 
 KEY = "sk-ant-unit-test"
 JPEG = b"\xff\xd8\xff\xd9"

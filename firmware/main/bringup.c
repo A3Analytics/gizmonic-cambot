@@ -23,9 +23,9 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "secrets.h"
-#include "witness_llm_client.h"
-#include "witness_recorder.h"
-#include "witness_time.h"
+#include "cambot_llm_client.h"
+#include "cambot_recorder.h"
+#include "cambot_time.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 
@@ -67,7 +67,7 @@ static char camera_id[20];
 static void make_id(void) {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    snprintf(camera_id, sizeof camera_id, "witness-%02x%02x", mac[4], mac[5]);
+    snprintf(camera_id, sizeof camera_id, "cambot-%02x%02x", mac[4], mac[5]);
 }
 
 static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data) {
@@ -101,14 +101,14 @@ static void start_wifi(void) {
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &on_wifi, NULL));
 
     wifi_config_t wifi = {0};
-    strncpy((char *)wifi.sta.ssid, WITNESS_WIFI_SSID, sizeof wifi.sta.ssid - 1);
-    strncpy((char *)wifi.sta.password, WITNESS_WIFI_PASSWORD, sizeof wifi.sta.password - 1);
+    strncpy((char *)wifi.sta.ssid, CAMBOT_WIFI_SSID, sizeof wifi.sta.ssid - 1);
+    strncpy((char *)wifi.sta.password, CAMBOT_WIFI_PASSWORD, sizeof wifi.sta.password - 1);
     wifi.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
     wifi.sta.pmf_cfg.capable = true;
     wifi.sta.pmf_cfg.required = false;
 
-    printf("wifi=connecting ssid=%s\n", WITNESS_WIFI_SSID);
+    printf("wifi=connecting ssid=%s\n", CAMBOT_WIFI_SSID);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi));
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -119,7 +119,7 @@ static void register_once(void) {
     snprintf(body, sizeof body, "{\"id\":\"%s\",\"fw\":\"setup\",\"board\":\"foriot_s3cam\"}", camera_id);
 
     esp_http_client_config_t cfg = {
-        .url = WITNESS_REGISTRAR_URL,
+        .url = CAMBOT_REGISTRAR_URL,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 4000,
     };
@@ -141,7 +141,7 @@ static void register_once(void) {
 }
 
 static void register_task(void *arg) {
-    witness_time_start("America/Los_Angeles");
+    cambot_time_start("America/Los_Angeles");
     while (1) {
         xEventGroupWaitBits(wifi_events, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
         register_once();
@@ -151,7 +151,7 @@ static void register_task(void *arg) {
 
 static bool authorized(httpd_req_t *req) {
     char expected[96];
-    int n = snprintf(expected, sizeof expected, "Bearer %s", WITNESS_CAMERA_PASSWORD);
+    int n = snprintf(expected, sizeof expected, "Bearer %s", CAMBOT_CAMERA_PASSWORD);
     if (n < 0 || n >= (int)sizeof expected) {
         return false;
     }
@@ -182,10 +182,10 @@ static esp_err_t frame_get(httpd_req_t *req) {
     /* Prefer the recorder's last JPEG so preview does not steal the sensor. */
     size_t cached_len = 0;
     uint8_t *cached = heap_caps_malloc(120 * 1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (cached && witness_recorder_peek_jpeg(cached, 120 * 1024, &cached_len) && cached_len > 0) {
+    if (cached && cambot_recorder_peek_jpeg(cached, 120 * 1024, &cached_len) && cached_len > 0) {
         httpd_resp_set_type(req, "image/jpeg");
         httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-        httpd_resp_set_hdr(req, "X-Witness-Preview", "cached");
+        httpd_resp_set_hdr(req, "X-Cambot-Preview", "cached");
         esp_err_t err = httpd_resp_send(req, (const char *)cached, (ssize_t)cached_len);
         free(cached);
         return err;
@@ -217,7 +217,7 @@ static esp_err_t frame_get(httpd_req_t *req) {
     }
     httpd_resp_set_type(req, "image/jpeg");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    httpd_resp_set_hdr(req, "X-Witness-Preview", "live");
+    httpd_resp_set_hdr(req, "X-Cambot-Preview", "live");
     esp_err_t err = httpd_resp_send(req, (const char *)frame->buf, (ssize_t)frame->len);
     esp_camera_fb_return(frame);
     xSemaphoreGive(camera_lock);
@@ -237,7 +237,7 @@ static void start_http(void) {
     httpd_uri_t frame = {.uri = "/api/v1/frame.jpg", .method = HTTP_GET, .handler = frame_get};
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &ping));
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &frame));
-    witness_http_register(server, WITNESS_CAMERA_PASSWORD);
+    cambot_http_register(server, CAMBOT_CAMERA_PASSWORD);
     printf("httpd=ok port=80\n");
 }
 
@@ -269,7 +269,7 @@ void app_main(void) {
     esp_chip_info(&chip);
     esp_flash_get_size(NULL, &flash_bytes);
     make_id();
-    printf("boot=HELLO witness fw=setup board=foriot_s3cam id=%s\n", camera_id);
+    printf("boot=HELLO cambot fw=setup board=foriot_s3cam id=%s\n", camera_id);
     printf("chip=esp32s3 cores=%d rev=%d flash_mb=%u psram_mb=%u\n", chip.cores, chip.revision,
            (unsigned)(flash_bytes / (1024 * 1024)), (unsigned)(psram_bytes / (1024 * 1024)));
 
@@ -284,19 +284,19 @@ void app_main(void) {
     wifi_events = xEventGroupCreate();
     start_wifi();
     start_http();
-#ifndef WITNESS_MODEL_KEY
-#define WITNESS_MODEL_KEY ""
+#ifndef CAMBOT_MODEL_KEY
+#define CAMBOT_MODEL_KEY ""
 #endif
-#ifndef WITNESS_ANTHROPIC_KEY
-#define WITNESS_ANTHROPIC_KEY ""
+#ifndef CAMBOT_ANTHROPIC_KEY
+#define CAMBOT_ANTHROPIC_KEY ""
 #endif
-#ifndef WITNESS_JEV_KEY
-#define WITNESS_JEV_KEY ""
+#ifndef CAMBOT_JEV_KEY
+#define CAMBOT_JEV_KEY ""
 #endif
-    witness_indexer_set_keys(WITNESS_MODEL_KEY, WITNESS_JEV_KEY);
-    witness_recorder_start(camera_lock);
-    witness_llm_drivers_ready();
-    printf("llm openai=%s anthropic=%s jev=%s\n", WITNESS_MODEL_KEY[0] ? "set" : "missing",
-           WITNESS_ANTHROPIC_KEY[0] ? "set" : "missing", WITNESS_JEV_KEY[0] ? "set" : "missing");
+    cambot_indexer_set_keys(CAMBOT_MODEL_KEY, CAMBOT_JEV_KEY);
+    cambot_recorder_start(camera_lock);
+    cambot_llm_drivers_ready();
+    printf("llm openai=%s anthropic=%s jev=%s\n", CAMBOT_MODEL_KEY[0] ? "set" : "missing",
+           CAMBOT_ANTHROPIC_KEY[0] ? "set" : "missing", CAMBOT_JEV_KEY[0] ? "set" : "missing");
     xTaskCreate(register_task, "register", 8192, NULL, 5, NULL);
 }

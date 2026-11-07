@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Gizmonic Cambot · open hardware and open source" />
+  <title>Gizmonic Cambot: an open, $20 camera that remembers what your robots did</title>
+  <style>
+
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">:root {
+--ink: #1c2330;
+--muted: #5b6678;
+--rule: #d9dee7;
+--accent: #0f6c7a;
+--accent-soft: #e6f3f4;
+--warn-soft: #fff6e0;
+--warn: #9a6700;
+--code-bg: #f4f6f9;
+}
+@page {
+size: Letter;
+margin: 18mm 17mm 18mm 17mm;
+}
+html {
+font-size: 10.5pt;
+}
+body {
+font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+color: var(--ink);
+line-height: 1.5;
+max-width: 7.4in;
+margin: 2.5rem auto;
+padding: 0 1.25rem;
+}
+@media print {
+body {
+margin: 0 auto;
+padding: 0;
+}
+}
+header#title-block-header {
+border-bottom: 3px solid var(--accent);
+padding-bottom: 0.9rem;
+margin-bottom: 1.6rem;
+}
+h1.title {
+font-size: 2.05rem;
+line-height: 1.15;
+margin: 0 0 0.35rem 0;
+letter-spacing: -0.01em;
+}
+p.subtitle {
+font-size: 1.15rem;
+color: var(--muted);
+margin: 0 0 0.5rem 0;
+}
+p.author,
+p.date {
+margin: 0;
+color: var(--muted);
+font-size: 0.92rem;
+}
+h2 {
+font-size: 1.35rem;
+color: var(--accent);
+border-bottom: 1px solid var(--rule);
+padding-bottom: 0.2rem;
+margin-top: 1.9rem;
+break-after: avoid;
+}
+h3 {
+font-size: 1.08rem;
+margin-top: 1.35rem;
+break-after: avoid;
+}
+h4 {
+font-size: 0.98rem;
+margin-top: 1.1rem;
+break-after: avoid;
+}
+p,
+li {
+orphans: 3;
+widows: 3;
+}
+a {
+color: var(--accent);
+}
+code {
+font-family: "SF Mono", Menlo, Consolas, monospace;
+font-size: 0.88em;
+background: var(--code-bg);
+padding: 0.05em 0.3em;
+border-radius: 3px;
+}
+pre {
+background: var(--code-bg);
+border: 1px solid var(--rule);
+border-radius: 5px;
+padding: 0.65rem 0.8rem;
+overflow-x: auto;
+font-size: 0.84rem;
+line-height: 1.4;
+break-inside: avoid;
+}
+pre code {
+background: none;
+padding: 0;
+font-size: inherit;
+}
+table {
+border-collapse: collapse;
+width: 100%;
+margin: 0.8rem 0 1.1rem 0;
+font-size: 0.9rem;
+}
+tr {
+break-inside: avoid;
+}
+thead {
+display: table-header-group;
+}
+th,
+td {
+border-bottom: 1px solid var(--rule);
+padding: 0.32rem 0.5rem;
+text-align: left;
+vertical-align: top;
+}
+th {
+background: var(--accent-soft);
+font-weight: 600;
+}
+blockquote {
+margin: 1rem 0;
+padding: 0.6rem 0.9rem;
+border-left: 4px solid var(--accent);
+background: var(--accent-soft);
+color: var(--ink);
+}
+blockquote p {
+margin: 0.25rem 0;
+}
+.note {
+background: var(--warn-soft);
+border-left: 4px solid var(--warn);
+padding: 0.6rem 0.9rem;
+margin: 1rem 0;
+}
+figure {
+margin: 1.2rem 0;
+text-align: center;
+break-inside: avoid;
+}
+figure img {
+max-width: 100%;
+}
+figcaption {
+font-size: 0.86rem;
+color: var(--muted);
+margin-top: 0.4rem;
+}
+nav#TOC {
+border: 1px solid var(--rule);
+border-radius: 5px;
+padding: 0.5rem 1rem;
+margin-bottom: 1.5rem;
+font-size: 0.92rem;
+}
+nav#TOC ul {
+margin: 0.2rem 0;
+padding-left: 1.1rem;
+}
+nav#TOC > ul > li > ul {
+display: none;
+}
+.pagebreak {
+break-before: page;
+}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Gizmonic Cambot: an open, $20 camera that remembers
+what your robots did</h1>
+<p class="subtitle">White paper · semantically indexed video for AI
+monitoring of robots and lab equipment</p>
+<p class="author">Gizmonic Cambot · open hardware and open source</p>
+<p class="date">Draft 0.1 · October 2026</p>
+</header>
+<h2 id="summary">Summary</h2>
+<p>Robots fail in ways their logs do not explain. A pipette misses a
+tip, a gripper drops a part, a mobile base clips a table leg. Video of
+the event usually exists only if someone happened to be recording, and
+even then no one wants to scrub through hours of footage to find the
+four seconds that matter.</p>
+<p><strong>Gizmonic Cambot</strong> is an open-source camera built from
+a roughly $12 ESP32-S3 camera board, a microSD card and a 3D-printed
+case. It records continuously into a rolling buffer on the card, uses a
+cloud vision model to build a searchable index of what happened, and
+answers questions in plain language:</p>
+<blockquote>
+<p>“Show me between 12:00 and 12:30 where the machine picks up a pipette
+tip.”</p>
+</blockquote>
+<p>The camera replies with the matching moments, a confidence for each,
+thumbnails and short clips served straight from its SD card. The same
+functions are available as a REST API and as an MCP server, so a coding
+agent such as Cursor, or the robot’s own controller, can query the
+camera directly.</p>
+<p>The hardware, case, mounts, firmware and documentation are all open.
+The case uses a modular mount so the camera can be clamped, stuck
+magnetically to steel, or attached with any foot a user designs.</p>
+<h2 id="the-problem">The problem</h2>
+<p>Labs and workshops are filling up with low-cost automation: liquid
+handlers, desktop arms, 3D printer farms, pick-and-place cells, hobby
+mobile robots. Three things make visual monitoring of them harder than
+it should be:</p>
+<ol type="1">
+<li><strong>Video is write-only.</strong> Conventional cameras record
+well but cannot answer “when did X happen?” Finding an event means a
+human scrubbing a timeline.</li>
+<li><strong>Cameras are closed or expensive.</strong> Commercial “AI
+cameras” lock footage and models into a vendor cloud, cost $50–$300
+each, and are designed for doorways rather than robot work cells.</li>
+<li><strong>Mounting is an afterthought.</strong> A camera that watches
+a robot needs to sit on the robot’s frame, a shelf edge, an aluminum
+extrusion or a steel enclosure, often at an odd angle. Most cameras ship
+with one tripod thread.</li>
+</ol>
+<h2 id="the-concept">The concept</h2>
+<p>Cambot is designed to be cheap enough to leave on every machine:</p>
+<ul>
+<li><strong>Records everything locally.</strong> About 5 frames per
+second at 800×600 by default, stored as one-minute segments with a
+per-frame time index. When the card fills, the oldest segments are
+deleted first. Nothing leaves the camera unless the indexer or a query
+sends it.</li>
+<li><strong>Indexes only what matters.</strong> An on-board activity
+detector scores motion on every frame. Keyframes are sent for captioning
+only when something is happening, plus one idle keyframe a minute, so an
+empty room costs almost nothing.</li>
+<li><strong>Answers questions.</strong> An on-board agent runs a
+tool-calling loop against a cloud vision model. The model plans the
+search, the camera does the cheap text search locally, and the model
+checks only a few candidate windows frame by frame.</li>
+<li><strong>Speaks to agents.</strong> Every capability is a documented
+REST endpoint and an MCP tool, so Cursor or any MCP-capable agent can
+pull clips, ask questions and set up watch lists without custom glue
+code.</li>
+</ul>
+<figure>
+<img role="img" aria-label="System architecture. Everything left of the cloud runs on the ESP32-S3; the model is only called for captions, verification and planning." src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMzgwIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTIiPgogIDxkZWZzPgogICAgPG1hcmtlciBpZD0iYSIgdmlld0JveD0iMCAwIDEwIDEwIiByZWZYPSI5IiByZWZZPSI1IiBtYXJrZXJXaWR0aD0iNyIgbWFya2VySGVpZ2h0PSI3IiBvcmllbnQ9ImF1dG8tc3RhcnQtcmV2ZXJzZSI+CiAgICAgIDxwYXRoIGQ9Ik0wLDAgTDEwLDUgTDAsMTAgeiIgZmlsbD0iIzViNjY3OCIvPgogICAgPC9tYXJrZXI+CiAgPC9kZWZzPgogIDxzdHlsZT4KICAgIC5ib3ggeyBmaWxsOiAjZmZmZmZmOyBzdHJva2U6ICM5YWE1YjU7IHN0cm9rZS13aWR0aDogMS4yOyB9CiAgICAuZGV2IHsgZmlsbDogI2U2ZjNmNDsgc3Ryb2tlOiAjMGY2YzdhOyBzdHJva2Utd2lkdGg6IDEuNjsgfQogICAgLmNsb3VkIHsgZmlsbDogI2YzZWZmYTsgc3Ryb2tlOiAjNmI0ZmEwOyBzdHJva2Utd2lkdGg6IDEuNDsgfQogICAgLnNkIHsgZmlsbDogI2ZmZjZlMDsgc3Ryb2tlOiAjOWE2NzAwOyBzdHJva2Utd2lkdGg6IDEuMzsgfQogICAgLnQgeyBmaWxsOiAjMWMyMzMwOyB9CiAgICAuaCB7IGZpbGw6ICMwZjZjN2E7IGZvbnQtd2VpZ2h0OiA3MDA7IGZvbnQtc2l6ZTogMTNweDsgfQogICAgLnMgeyBmaWxsOiAjNWI2Njc4OyBmb250LXNpemU6IDEwLjVweDsgfQogICAgLmxuIHsgc3Ryb2tlOiAjNWI2Njc4OyBzdHJva2Utd2lkdGg6IDEuMzsgZmlsbDogbm9uZTsgbWFya2VyLWVuZDogdXJsKCNhKTsgfQogICAgLmRsIHsgc3Ryb2tlOiAjNmI0ZmEwOyBzdHJva2Utd2lkdGg6IDEuMzsgZmlsbDogbm9uZTsgc3Ryb2tlLWRhc2hhcnJheTogNSAzOyBtYXJrZXItZW5kOiB1cmwoI2EpOyB9CiAgPC9zdHlsZT4KCiAgPCEtLSBzY2VuZSAtLT4KICA8cmVjdCBjbGFzcz0iYm94IiB4PSIxMCIgeT0iMTQwIiB3aWR0aD0iMTEwIiBoZWlnaHQ9IjgwIiByeD0iOCIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSI2NSIgeT0iMTcyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iNjAwIj5Sb2JvdCAvIG1hY2hpbmU8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjY1IiB5PSIxOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnBpcGV0dGVzLCBhcm1zLDwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNjUiIHk9IjIwNCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+bW9iaWxlIGJhc2VzPC90ZXh0PgoKICA8IS0tIGRldmljZSAtLT4KICA8cmVjdCBjbGFzcz0iZGV2IiB4PSIxNTAiIHk9IjIwIiB3aWR0aD0iMzcwIiBoZWlnaHQ9IjM0MCIgcng9IjEyIi8+CiAgPHRleHQgY2xhc3M9ImgiIHg9IjE2NSIgeT0iNDIiPkdpem1vbmljIENhbWJvdCAoRVNQMzItUzMgKyBPVjM2NjApPC90ZXh0PgoKICA8cmVjdCBjbGFzcz0iYm94IiB4PSIxNjgiIHk9IjYwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjQ0IiByeD0iNiIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSIyMTgiIHk9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iNjAwIj5DYXB0dXJlPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSIyMTgiIHk9Ijk1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5KUEVHIDUmIzgyMTE7MTAgZnBzPC90ZXh0PgoKICA8cmVjdCBjbGFzcz0iYm94IiB4PSIzMDAiIHk9IjYwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjQ0IiByeD0iNiIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSI0MDAiIHk9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iNjAwIj5SZWNvcmRlcjwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNDAwIiB5PSI5NSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NjAgcyBzZWdtZW50cyArIGZyYW1lIGluZGV4PC90ZXh0PgoKICA8cmVjdCBjbGFzcz0ic2QiIHg9IjMwMCIgeT0iMTIyIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjU2IiByeD0iNiIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSI0MDAiIHk9IjE0NCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9IjYwMCI+bWljcm9TRCByb2xsaW5nIGJ1ZmZlcjwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNDAwIiB5PSIxNjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnZpZGVvICYjMTgzOyBzZW1hbnRpYyBpbmRleCAmIzE4MzsgZXZlbnRzPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSI0MDAiIHk9IjE3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+b2xkZXN0IHNlZ21lbnRzIGRlbGV0ZWQgZmlyc3Q8L3RleHQ+CgogIDxyZWN0IGNsYXNzPSJib3giIHg9IjE2OCIgeT0iMTIyIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjU2IiByeD0iNiIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSIyMTgiIHk9IjE0MyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9IjYwMCI+QWN0aXZpdHk8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjIxOCIgeT0iMTU4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xLzgtc2NhbGUgbW90aW9uPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSIyMTgiIHk9IjE3MSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+c2NvcmUgcGVyIGZyYW1lPC90ZXh0PgoKICA8cmVjdCBjbGFzcz0iYm94IiB4PSIxNjgiIHk9IjE5OCIgd2lkdGg9IjE2MCIgaGVpZ2h0PSI1NiIgcng9IjYiLz4KICA8dGV4dCBjbGFzcz0idCIgeD0iMjQ4IiB5PSIyMTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtd2VpZ2h0PSI2MDAiPkluZGV4ZXI8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjI0OCIgeT0iMjM0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5rZXlmcmFtZXMgJiM4NTk0OyBjYXB0aW9ucywgdGFncyw8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjI0OCIgeT0iMjQ3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj53YXRjaC1saXN0IGhpdHM8L3RleHQ+CgogIDxyZWN0IGNsYXNzPSJib3giIHg9IjM0NSIgeT0iMTk4IiB3aWR0aD0iMTU1IiBoZWlnaHQ9IjU2IiByeD0iNiIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSI0MjIiIHk9IjIxOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9IjYwMCI+QWdlbnQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjQyMiIgeT0iMjM0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj50b29sLWNhbGxpbmcgbG9vcDo8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjQyMiIgeT0iMjQ3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5zZWFyY2ggJiM4NTk0OyBpbnNwZWN0ICYjODU5NDsgY2xpcDwvdGV4dD4KCiAgPHJlY3QgY2xhc3M9ImJveCIgeD0iMTY4IiB5PSIyNzYiIHdpZHRoPSIzMzIiIGhlaWdodD0iNjYiIHJ4PSI2Ii8+CiAgPHRleHQgY2xhc3M9InQiIHg9IjMzNCIgeT0iMjk4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iNjAwIj5BUEkgc3VyZmFjZTwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMzM0IiB5PSIzMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlJFU1QgL2FwaS92MSAmIzE4MzsgTUNQIC9tY3AgJiMxODM7IHdlYiBVSSAmIzE4MzsgbGl2ZSBNSlBFRzwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMzM0IiB5PSIzMjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmJlYXJlci10b2tlbiBhdXRoICYjMTgzOyBtRE5TIGNhbWJvdC14eHh4LmxvY2FsPC90ZXh0PgoKICA8IS0tIGNsb3VkIC0tPgogIDxyZWN0IGNsYXNzPSJjbG91ZCIgeD0iNTgwIiB5PSIxNTAiIHdpZHRoPSIxNzAiIGhlaWdodD0iOTAiIHJ4PSI0MCIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSI2NjUiIHk9IjE4NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9IjYwMCI+Q2xvdWQgbW9kZWw8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjY2NSIgeT0iMjAyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj52aXNpb24gKyB0b29sIGNhbGxpbmc8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjY2NSIgeT0iMjE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4ob3IgYSBMQU4gbW9kZWwgc2VydmVyKTwvdGV4dD4KCiAgPCEtLSBjbGllbnRzIC0tPgogIDxyZWN0IGNsYXNzPSJib3giIHg9IjU4MCIgeT0iMjc1IiB3aWR0aD0iMTcwIiBoZWlnaHQ9Ijc4IiByeD0iOCIvPgogIDx0ZXh0IGNsYXNzPSJ0IiB4PSI2NjUiIHk9IjI5NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9IjYwMCI+Q2xpZW50czwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNjY1IiB5PSIzMTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkN1cnNvciAvIGFueSBNQ1AgYWdlbnQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjY2NSIgeT0iMzI2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5jYW1ib3QgQ0xJICYjMTgzOyBicm93c2VyPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSI2NjUiIHk9IjM0MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+cm9ib3QgY29udHJvbGxlciAobWFya3MpPC90ZXh0PgoKICA8IS0tIGFycm93cyAtLT4KICA8cGF0aCBjbGFzcz0ibG4iIGQ9Ik0xMjAsMTY1IEMxNDAsMTIwIDE0NSw5NSAxNjYsODQiLz4KICA8dGV4dCBjbGFzcz0icyIgeD0iMTA0IiB5PSIxMjIiPmxpZ2h0PC90ZXh0PgogIDxwYXRoIGNsYXNzPSJsbiIgZD0iTTI2OCw4MiBMMjk4LDgyIi8+CiAgPHBhdGggY2xhc3M9ImxuIiBkPSJNNDAwLDEwNCBMNDAwLDEyMCIvPgogIDxwYXRoIGNsYXNzPSJsbiIgZD0iTTIxOCwxMDQgTDIxOCwxMjAiLz4KICA8cGF0aCBjbGFzcz0ibG4iIGQ9Ik0yMTgsMTc4IEwyMTgsMTk2Ii8+CiAgPHBhdGggY2xhc3M9ImxuIiBkPSJNMzAwLDE2NSBDMjgwLDE4NSAyNzUsMTkwIDI3MCwxOTYiLz4KICA8cGF0aCBjbGFzcz0ibG4iIGQ9Ik0zMjgsMjI2IEwzNDMsMjI2Ii8+CiAgPHBhdGggY2xhc3M9ImxuIiBkPSJNNDQwLDE5OCBMNDQwLDE4MCIvPgogIDxwYXRoIGNsYXNzPSJsbiIgZD0iTTQyMiwyNTQgTDQyMiwyNzQiLz4KICA8cGF0aCBjbGFzcz0iZGwiIGQ9Ik0zMjgsMjA2IEwzMzYsMjA2IEwzMzYsMTg4IEw1NzgsMTg4Ii8+CiAgPHBhdGggY2xhc3M9ImRsIiBkPSJNNTAwLDIyNiBMNTc4LDIxMiIvPgogIDxwYXRoIGNsYXNzPSJsbiIgZD0iTTU3OCwzMTIgTDUwMiwzMTIiLz4KICA8cGF0aCBjbGFzcz0ibG4iIGQ9Ik01MDIsMzAwIEw1NzgsMzAwIi8+Cjwvc3ZnPgo=" alt="System architecture. Everything left of the cloud runs on the ESP32-S3; the model is only called for captions, verification and planning." />
+<figcaption aria-hidden="true">System architecture. Everything left of
+the cloud runs on the ESP32-S3; the model is only called for captions,
+verification and planning.</figcaption>
+</figure>
+<h2 id="how-it-works">How it works</h2>
+<h3 id="capture-and-the-rolling-buffer">Capture and the rolling
+buffer</h3>
+<p>The OV3660 sensor produces JPEG frames directly, so the ESP32-S3
+never encodes video. The recorder appends frames to a one-minute segment
+file and writes a small index of each frame’s timestamp, offset and
+length. Timestamps come from network time (SNTP) and are stored in UTC;
+queries are interpreted in the camera’s configured time zone.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Resolution</th>
+<th>Rate</th>
+<th>Approx. data rate</th>
+<th>32 GB card holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default</td>
+<td>800×600</td>
+<td>5 fps</td>
+<td>~0.7 GB/hour</td>
+<td>~1.5 days</td>
+</tr>
+<tr>
+<td>Detail</td>
+<td>1280×720</td>
+<td>5 fps</td>
+<td>~1.4 GB/hour</td>
+<td>~18 hours</td>
+</tr>
+<tr>
+<td>Smooth</td>
+<td>800×600</td>
+<td>10 fps</td>
+<td>~1.4 GB/hour</td>
+<td>~18 hours</td>
+</tr>
+<tr>
+<td>Timelapse</td>
+<td>1600×1200</td>
+<td>1 fps</td>
+<td>~0.4 GB/hour</td>
+<td>~3 days</td>
+</tr>
+</tbody>
+</table>
+<p>These figures assume typical JPEG sizes at quality 12 and keep 10% of
+the card free. Busy, detailed scenes produce larger frames.</p>
+<h3 id="the-semantic-index">The semantic index</h3>
+<p>Each keyframe the indexer selects is sent to the vision model with a
+short <strong>scene profile</strong> written by the user (“This camera
+watches an Opentrons OT-2 liquid handler. Tip racks are on the left,
+plates are in the middle.”) and an optional <strong>watch list</strong>
+of named events (“tip pickup”, “tip eject”, “gripper open”, “person in
+frame”). The model returns structured JSON: a caption, the objects and
+actions it sees, the robot state, and a yes/no with confidence for each
+watch-list item.</p>
+<p>The camera stores these records on the SD card in hourly files next
+to the video. Consecutive keyframes that share an action are merged into
+<strong>events</strong> with a start and end time. An optional phase-2
+feature adds small text embeddings for each caption, quantized to a few
+hundred bytes, so the camera can rank by meaning as well as by
+keyword.</p>
+<p><strong>Robot marks</strong> make the index far more precise. A robot
+controller can call <code>POST /api/v1/marks</code> (or pulse an
+optional trigger input) with a label such as
+<code>step 12: pick tip</code>. Marks are stored on the same timeline as
+the video, so the camera can answer “show me every step 12” exactly, and
+compare what the robot claimed to do with what the camera saw.</p>
+<h3 id="answering-a-question">Answering a question</h3>
+<figure>
+<img role="img" aria-label="How a question becomes an answer. Only step 3 sends images to the model." src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMjEwIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTIiPgogIDxkZWZzPgogICAgPG1hcmtlciBpZD0icSIgdmlld0JveD0iMCAwIDEwIDEwIiByZWZYPSI5IiByZWZZPSI1IiBtYXJrZXJXaWR0aD0iNyIgbWFya2VySGVpZ2h0PSI3IiBvcmllbnQ9ImF1dG8iPgogICAgICA8cGF0aCBkPSJNMCwwIEwxMCw1IEwwLDEwIHoiIGZpbGw9IiM1YjY2NzgiLz4KICAgIDwvbWFya2VyPgogIDwvZGVmcz4KICA8c3R5bGU+CiAgICAuYiB7IGZpbGw6ICNmZmZmZmY7IHN0cm9rZTogIzlhYTViNTsgc3Ryb2tlLXdpZHRoOiAxLjI7IH0KICAgIC5rIHsgZmlsbDogI2U2ZjNmNDsgc3Ryb2tlOiAjMGY2YzdhOyBzdHJva2Utd2lkdGg6IDEuNDsgfQogICAgLnQgeyBmaWxsOiAjMWMyMzMwOyBmb250LXdlaWdodDogNjAwOyB9CiAgICAucyB7IGZpbGw6ICM1YjY2Nzg7IGZvbnQtc2l6ZTogMTAuNXB4OyB9CiAgICAubiB7IGZpbGw6ICMwZjZjN2E7IGZvbnQtd2VpZ2h0OiA3MDA7IGZvbnQtc2l6ZTogMTFweDsgfQogICAgLmxuIHsgc3Ryb2tlOiAjNWI2Njc4OyBzdHJva2Utd2lkdGg6IDEuMzsgZmlsbDogbm9uZTsgbWFya2VyLWVuZDogdXJsKCNxKTsgfQogIDwvc3R5bGU+CgogIDxyZWN0IGNsYXNzPSJrIiB4PSIxMCIgeT0iMjAiIHdpZHRoPSI3NDAiIGhlaWdodD0iNDAiIHJ4PSI2Ii8+CiAgPHRleHQgY2xhc3M9InQiIHg9IjI0IiB5PSI0NSI+JiM4MjIwO1Nob3cgbWUgYmV0d2VlbiAxMjowMCBhbmQgMTI6MzAgd2hlcmUgdGhlIG1hY2hpbmUgcGlja3MgdXAgYSBwaXBldHRlIHRpcC4mIzgyMjE7PC90ZXh0PgoKICA8cmVjdCBjbGFzcz0iYiIgeD0iMTAiIHk9Ijg1IiB3aWR0aD0iMTcwIiBoZWlnaHQ9IjEwMCIgcng9IjYiLz4KICA8dGV4dCBjbGFzcz0ibiIgeD0iMjIiIHk9IjEwNCI+MSAmIzE4MzsgUExBTjwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMjIiIHk9IjEyMiI+TW9kZWwgcGFyc2VzIHRoZSB0aW1lIHdpbmRvdzwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMjIiIHk9IjEzNiI+KGRldmljZSB0aW1lIHpvbmUpIGFuZCB0aGU8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjIyIiB5PSIxNTAiPmV2ZW50OiAmIzgyMjA7cGlwZXR0ZSB0aXAgcGlja3VwJiM4MjIxOy48L3RleHQ+CgogIDxyZWN0IGNsYXNzPSJiIiB4PSIyMDAiIHk9Ijg1IiB3aWR0aD0iMTcwIiBoZWlnaHQ9IjEwMCIgcng9IjYiLz4KICA8dGV4dCBjbGFzcz0ibiIgeD0iMjEyIiB5PSIxMDQiPjIgJiMxODM7IFNFQVJDSCAob24gZGV2aWNlKTwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMjEyIiB5PSIxMjIiPnNlYXJjaF9pbmRleCBvdmVyIGNhcHRpb25zLDwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMjEyIiB5PSIxMzYiPnRhZ3MsIHdhdGNoLWxpc3QgaGl0cywgcm9ib3Q8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjIxMiIgeT0iMTUwIj5tYXJrcyAmIzg1OTQ7IHJhbmtlZCBjYW5kaWRhdGVzLjwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMjEyIiB5PSIxNjQiPlRleHQgb25seS4gRmFzdCBhbmQgY2hlYXAuPC90ZXh0PgoKICA8cmVjdCBjbGFzcz0iYiIgeD0iMzkwIiB5PSI4NSIgd2lkdGg9IjE3MCIgaGVpZ2h0PSIxMDAiIHJ4PSI2Ii8+CiAgPHRleHQgY2xhc3M9Im4iIHg9IjQwMiIgeT0iMTA0Ij4zICYjMTgzOyBWRVJJRlkgKHZpc2lvbik8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjQwMiIgeT0iMTIyIj5pbnNwZWN0X3dpbmRvdyBwdWxscyBkZW5zZTwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNDAyIiB5PSIxMzYiPmZyYW1lcyBmcm9tIFNEIGFyb3VuZCBlYWNoPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSI0MDIiIHk9IjE1MCI+Y2FuZGlkYXRlOyBtb2RlbCBjb25maXJtcyBhbmQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjQwMiIgeT0iMTY0Ij50aWdodGVucyBzdGFydCAvIGVuZC48L3RleHQ+CgogIDxyZWN0IGNsYXNzPSJrIiB4PSI1ODAiIHk9Ijg1IiB3aWR0aD0iMTcwIiBoZWlnaHQ9IjEwMCIgcng9IjYiLz4KICA8dGV4dCBjbGFzcz0ibiIgeD0iNTkyIiB5PSIxMDQiPjQgJiMxODM7IEFOU1dFUjwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNTkyIiB5PSIxMjIiPjEyOjA3OjQxJiM4MjExOzEyOjA3OjQ2ICgwLjkzKTwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNTkyIiB5PSIxMzYiPjEyOjE5OjAyJiM4MjExOzEyOjE5OjA3ICgwLjg4KTwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNTkyIiB5PSIxNTAiPnRodW1ibmFpbHMgKyBjbGlwIFVSTHM7PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSI1OTIiIHk9IjE2NCI+cmVzdWx0IHdyaXR0ZW4gYmFjayB0byBpbmRleC48L3RleHQ+CgogIDxwYXRoIGNsYXNzPSJsbiIgZD0iTTE4MCwxMzUgTDE5OCwxMzUiLz4KICA8cGF0aCBjbGFzcz0ibG4iIGQ9Ik0zNzAsMTM1IEwzODgsMTM1Ii8+CiAgPHBhdGggY2xhc3M9ImxuIiBkPSJNNTYwLDEzNSBMNTc4LDEzNSIvPgo8L3N2Zz4K" alt="How a question becomes an answer. Only step 3 sends images to the model." />
+<figcaption aria-hidden="true">How a question becomes an answer. Only
+step 3 sends images to the model.</figcaption>
+</figure>
+<ol type="1">
+<li><strong>Plan.</strong> The question goes to the cloud model along
+with a list of the camera’s tools. The model turns “between 12 and
+12:30” into a time range and “picks up a pipette tip” into a
+search.</li>
+<li><strong>Search.</strong> The camera searches its own index
+(captions, tags, watch-list hits, marks and optional embeddings) and
+returns ranked candidates as text.</li>
+<li><strong>Verify.</strong> For the best candidates the camera pulls
+frames from the SD card, a few seconds either side, and the model
+confirms the event and narrows its start and end. This also catches
+events that fell between keyframes.</li>
+<li><strong>Answer.</strong> The response lists moments with confidence,
+thumbnails and clip URLs. Verified results are written back to the index
+so the next similar question is answered from text alone.</li>
+</ol>
+<p>If the index has nothing useful, for example a question about
+something nobody put on the watch list, the agent can
+<strong>scan</strong> the window by sampling frames at a fixed interval.
+Scans are capped by a per-question frame budget, and the agent reports
+the estimated cost first when a scan would exceed it.</p>
+<h3 id="interfaces">Interfaces</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Interface</th>
+<th>Used by</th>
+<th>What it offers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Web UI at <code>http://cambot-xxxx.local/</code></td>
+<td>People</td>
+<td>Live view, timeline, ask box, settings</td>
+</tr>
+<tr>
+<td>REST <code>/api/v1/...</code></td>
+<td>Scripts, robot controllers</td>
+<td>Status, frames, clips, index search, ask, marks, config</td>
+</tr>
+<tr>
+<td>MCP <code>/mcp</code></td>
+<td>Cursor and other agents</td>
+<td>The same tools the on-board agent uses</td>
+</tr>
+<tr>
+<td><code>cambot</code> CLI</td>
+<td>Setup and bulk work</td>
+<td>Flash, provision Wi-Fi, discover, ask, pull clips, export MP4</td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-uses">Example uses</h2>
+<ul>
+<li><strong>Lab automation.</strong> “List every tip pickup this morning
+that took more than one attempt.” “Did anyone open the enclosure during
+the 2 PM run?”</li>
+<li><strong>Robot development.</strong> The Lloyd bartender robot that
+produced this design logs each move as a mark; the camera answers “show
+me the last five pours” and “where did the car stop short of the tape
+line?”</li>
+<li><strong>3D printer farms.</strong> A watch list for “spaghetti”,
+“part detached” and “nozzle blob” turns the index into an alarm feed via
+the events endpoint.</li>
+<li><strong>Pick-and-place and QA cells.</strong> Count picks per hour,
+pull clips of dropped parts, and compare robot marks to what was
+actually seen.</li>
+<li><strong>Agent-driven debugging.</strong> A coding agent fixing robot
+firmware can ask the camera what the robot did after the last flash,
+instead of asking the human.</li>
+</ul>
+<h2 id="hardware">Hardware</h2>
+<p>The reference board is the <strong>FORIOT ESP32-S3-CAM</strong>
+(Amazon B0GD2BZ9B1), a common layout also sold by Freenove, Goouuu and
+Keyestudio:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Specification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Module</td>
+<td>ESP32-S3-WROOM-1 N16R8: dual-core 240 MHz, 16 MB flash, 8 MB octal
+PSRAM</td>
+</tr>
+<tr>
+<td>Camera</td>
+<td>OV3660, 3 MP, on a 24-pin DVP flex cable</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>microSD (push-push, rear), 1-bit SDMMC on GPIO 38/39/40</td>
+</tr>
+<tr>
+<td>Connectivity</td>
+<td>2.4 GHz Wi-Fi 802.11 b/g/n, Bluetooth LE 5</td>
+</tr>
+<tr>
+<td>USB</td>
+<td>Two USB-C: TTL (CH340 UART, for flashing and logs) and native USB
+OTG</td>
+</tr>
+<tr>
+<td>Indicators</td>
+<td>Power LED, WS2812 RGB LED (GPIO 48), user LED (GPIO 2)</td>
+</tr>
+<tr>
+<td>Size</td>
+<td>62.6 × 28.3 mm PCB (vendor figure)</td>
+</tr>
+<tr>
+<td>Power</td>
+<td>5 V USB, plan for 0.5 A</td>
+</tr>
+</tbody>
+</table>
+<h3 id="case-and-modular-mounts">Case and modular mounts</h3>
+<figure>
+<img role="img" aria-label="The case is split so only two small parts change per board. Everything that touches the outside world is universal." src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMzMwIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIE5ldWUsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTIiPgogIDxzdHlsZT4KICAgIC5raXQgeyBmaWxsOiAjZTZmM2Y0OyBzdHJva2U6ICMwZjZjN2E7IHN0cm9rZS13aWR0aDogMS41OyB9CiAgICAudW5pIHsgZmlsbDogI2VlZjBmNDsgc3Ryb2tlOiAjNWI2Njc4OyBzdHJva2Utd2lkdGg6IDEuNTsgfQogICAgLmZvb3QgeyBmaWxsOiAjZmZmNmUwOyBzdHJva2U6ICM5YTY3MDA7IHN0cm9rZS13aWR0aDogMS41OyB9CiAgICAubWFnIHsgZmlsbDogIzlhYTViNTsgc3Ryb2tlOiAjNWI2Njc4OyB9CiAgICAudCB7IGZpbGw6ICMxYzIzMzA7IGZvbnQtd2VpZ2h0OiA2MDA7IH0KICAgIC5zIHsgZmlsbDogIzViNjY3ODsgZm9udC1zaXplOiAxMC41cHg7IH0KICAgIC5nIHsgZmlsbDogIzBmNmM3YTsgZm9udC13ZWlnaHQ6IDcwMDsgZm9udC1zaXplOiAxMXB4OyBsZXR0ZXItc3BhY2luZzogMC4wNGVtOyB9CiAgICAuZGFzaCB7IHN0cm9rZTogIzlhYTViNTsgc3Ryb2tlLWRhc2hhcnJheTogNCAzOyBmaWxsOiBub25lOyB9CiAgPC9zdHlsZT4KCiAgPHRleHQgY2xhc3M9ImciIHg9IjIwIiB5PSIyMiI+Qk9BUkQgS0lUIChvbmUgcGVyIGNhbWVyYSBib2FyZCk8L3RleHQ+CiAgPHRleHQgY2xhc3M9ImciIHg9IjMwMCIgeT0iMjIiPlVOSVZFUlNBTDwvdGV4dD4KICA8dGV4dCBjbGFzcz0iZyIgeD0iNTAwIiB5PSIyMiI+RkVFVCAoc3dhcCBmcmVlbHksIG9yIGRlc2lnbiB5b3VyIG93bik8L3RleHQ+CgogIDwhLS0gZnJvbnQgY292ZXIgLS0+CiAgPHJlY3QgY2xhc3M9ImtpdCIgeD0iMjAiIHk9IjQwIiB3aWR0aD0iMzQiIGhlaWdodD0iMTUwIiByeD0iNiIvPgogIDxjaXJjbGUgY3g9IjM3IiBjeT0iNzAiIHI9IjciIGZpbGw9IiMxYzIzMzAiLz4KICA8dGV4dCBjbGFzcz0idCIgeD0iMzciIHk9IjIxMiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RnJvbnQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjM3IiB5PSIyMjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmNvdmVyPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSIzNyIgeT0iMjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5sZW5zIHdpbmRvdzwvdGV4dD4KCiAgPCEtLSBzbGVkIHdpdGggYm9hcmQgLS0+CiAgPHJlY3QgY2xhc3M9ImtpdCIgeD0iOTAiIHk9IjQwIiB3aWR0aD0iNDQiIGhlaWdodD0iMTUwIiByeD0iNCIvPgogIDxyZWN0IHg9IjEwNCIgeT0iNDYiIHdpZHRoPSI4IiBoZWlnaHQ9IjEzOCIgZmlsbD0iIzJmNmIzYSIvPgogIDxyZWN0IHg9Ijk2IiB5PSI2MCIgd2lkdGg9IjgiIGhlaWdodD0iMTgiIGZpbGw9IiMxYzIzMzAiLz4KICA8dGV4dCBjbGFzcz0idCIgeD0iMTEyIiB5PSIyMTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlNsZWQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjExMiIgeT0iMjI2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ob2xkcyBQQ0IgKzwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMTEyIiB5PSIyNDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmNhbWVyYSBtb2R1bGU8L3RleHQ+CgogIDwhLS0gcmVhciBzaGVsbCAtLT4KICA8cmVjdCBjbGFzcz0idW5pIiB4PSIyMzAiIHk9IjQwIiB3aWR0aD0iNDQiIGhlaWdodD0iMTUwIiByeD0iNiIvPgogIDxyZWN0IGNsYXNzPSJ1bmkiIHg9IjI3NCIgeT0iOTYiIHdpZHRoPSIyMiIgaGVpZ2h0PSI5Ii8+CiAgPHJlY3QgY2xhc3M9InVuaSIgeD0iMjc0IiB5PSIxMTMiIHdpZHRoPSIyMiIgaGVpZ2h0PSI5Ii8+CiAgPGNpcmNsZSBjeD0iMjkwIiBjeT0iMTA5IiByPSIyLjYiIGZpbGw9IiM1YjY2NzgiLz4KICA8dGV4dCBjbGFzcz0idCIgeD0iMjYyIiB5PSIyMTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlJlYXIgc2hlbGw8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjI2MiIgeT0iMjI2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VU0ItQywgU0QgZG9vciw8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjI2MiIgeT0iMjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4yLWZpbmdlciBrbnVja2xlPC90ZXh0PgoKICA8cGF0aCBjbGFzcz0iZGFzaCIgZD0iTTU0LDExNSBMODgsMTE1Ii8+CiAgPHBhdGggY2xhc3M9ImRhc2giIGQ9Ik0xMzQsMTE1IEwyMjgsMTE1Ii8+CiAgPHRleHQgY2xhc3M9InMiIHg9IjE1MCIgeT0iMTA4Ij5zbGlkZXMgaW4sIDImIzIxNTsgTTI8L3RleHQ+CgogIDwhLS0gbW91bnQgaW50ZXJmYWNlIGxhYmVsIC0tPgogIDxyZWN0IHg9IjMxMCIgeT0iNzgiIHdpZHRoPSIxNjAiIGhlaWdodD0iNjIiIHJ4PSI2IiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiMwZjZjN2EiIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgPHRleHQgY2xhc3M9InQiIHg9IjM5MCIgeT0iOTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlctTW91bnQgaW50ZXJmYWNlPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSIzOTAiIHk9IjExNCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+R29Qcm8tc3R5bGUga251Y2tsZSwgTTUgYm9sdDwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iMzkwIiB5PSIxMjgiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmNhbWVyYSA9IDIgZmluZ2VycywgZm9vdCA9IDM8L3RleHQ+CgogIDwhLS0gY2xhbXAgLS0+CiAgPHBhdGggY2xhc3M9ImZvb3QiIGQ9Ik01MTAsNTAgaDgwIHYxOCBoLTYwIHY2MiBoNjAgdjE4IGgtODAgeiIvPgogIDxyZWN0IGNsYXNzPSJmb290IiB4PSI1NDAiIHk9IjM0IiB3aWR0aD0iMjIiIGhlaWdodD0iMTYiLz4KICA8cmVjdCB4PSI1ODgiIHk9IjEyMiIgd2lkdGg9IjQ0IiBoZWlnaHQ9IjciIGZpbGw9IiM1YjY2NzgiLz4KICA8cmVjdCB4PSI2MjgiIHk9IjExNCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjIzIiByeD0iMiIgZmlsbD0iIzViNjY3OCIvPgogIDxyZWN0IHg9IjU2NiIgeT0iMTEzIiB3aWR0aD0iMjIiIGhlaWdodD0iMjUiIHJ4PSIzIiBmaWxsPSIjOWFhNWI1Ii8+CiAgPHRleHQgY2xhc3M9InQiIHg9IjU2MCIgeT0iMjEyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5TY3JldyBjbGFtcDwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNTYwIiB5PSIyMjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjAmIzgyMTE7MzUgbW0gamF3LDwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNTYwIiB5PSIyNDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnByaW50ZWQgc2NyZXc8L3RleHQ+CgogIDwhLS0gbWFnbmV0IHB1Y2sgLS0+CiAgPHJlY3QgY2xhc3M9ImZvb3QiIHg9IjY1MCIgeT0iMTMwIiB3aWR0aD0iOTAiIGhlaWdodD0iMjQiIHJ4PSI1Ii8+CiAgPHJlY3QgY2xhc3M9ImZvb3QiIHg9IjY4NCIgeT0iMTE0IiB3aWR0aD0iMjIiIGhlaWdodD0iMTYiLz4KICA8cmVjdCBjbGFzcz0ibWFnIiB4PSI2NjAiIHk9IjE0MSIgd2lkdGg9IjE2IiBoZWlnaHQ9IjciLz4KICA8cmVjdCBjbGFzcz0ibWFnIiB4PSI2ODciIHk9IjE0MSIgd2lkdGg9IjE2IiBoZWlnaHQ9IjciLz4KICA8cmVjdCBjbGFzcz0ibWFnIiB4PSI3MTQiIHk9IjE0MSIgd2lkdGg9IjE2IiBoZWlnaHQ9IjciLz4KICA8dGV4dCBjbGFzcz0idCIgeD0iNjk1IiB5PSIyMTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1hZ25ldCBwdWNrPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzIiB4PSI2OTUiIHk9IjIyNiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+c2xpZGUtaW4gbWFnbmV0cyw8L3RleHQ+CiAgPHRleHQgY2xhc3M9InMiIHg9IjY5NSIgeT0iMjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5nbHVlIGluIHBsYWNlPC90ZXh0PgoKICA8IS0tIHRlbXBsYXRlIC0tPgogIDxyZWN0IHg9IjE4MCIgeT0iMjcwIiB3aWR0aD0iNTcwIiBoZWlnaHQ9IjQ0IiByeD0iNiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjOWE2NzAwIiBzdHJva2UtZGFzaGFycmF5PSI1IDMiIHN0cm9rZS13aWR0aD0iMS4zIi8+CiAgPHRleHQgY2xhc3M9InQiIHg9IjQ2NSIgeT0iMjkwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5Gb290IHRlbXBsYXRlOiBhbnkgYmFzZSArIHRoZSAzLWZpbmdlciBrbnVja2xlIG1vZHVsZTwvdGV4dD4KICA8dGV4dCBjbGFzcz0icyIgeD0iNDY1IiB5PSIzMDUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnppcC10aWUsIFZIQiBwYWQsIDIwMjAgVC1zbG90LCAxLzQiLTIwIHRyaXBvZCBhZGFwdGVyLCBzdWN0aW9uIGN1cCwgb2ZmLXRoZS1zaGVsZiBHb1BybyBtb3VudHM8L3RleHQ+Cjwvc3ZnPgo=" alt="The case is split so only two small parts change per board. Everything that touches the outside world is universal." />
+<figcaption aria-hidden="true">The case is split so only two small parts
+change per board. Everything that touches the outside world is
+universal.</figcaption>
+</figure>
+<p>The case has three layers of modularity:</p>
+<ul>
+<li>A <strong>board kit</strong> (sled plus front cover) is the only
+part specific to a camera board. Adding support for an AI-Thinker
+ESP32-CAM or a Seeed XIAO ESP32S3 Sense means designing a new sled and
+front cover. The shell interior is sized so both fit.</li>
+<li>The <strong>rear shell</strong> is universal. It carries the USB-C
+openings, the SD card door, vents and the <strong>W-Mount</strong>: a
+two-finger knuckle compatible with the widely used GoPro-style mount and
+an M5 bolt. Tilting the camera on this knuckle aims it.</li>
+<li><strong>Feet</strong> carry the matching three-finger knuckle.
+Version 1 ships two: a printable screw clamp for edges up to 35 mm, and
+a magnet puck with slide-in pockets for rare-earth magnets that are
+glued in place. Because the interface is a de facto standard,
+off-the-shelf GoPro mounts also work, and the repo includes a parametric
+knuckle module and a foot template for custom designs.</li>
+</ul>
+<h3 id="cost">Cost</h3>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Approx. cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ESP32-S3-CAM board with OV3660 (from a 3-pack at $34.99)</td>
+<td>$11.70</td>
+</tr>
+<tr>
+<td>32 GB high-endurance microSD</td>
+<td>$6–9</td>
+</tr>
+<tr>
+<td>PETG for case and one foot (~40 g)</td>
+<td>$1</td>
+</tr>
+<tr>
+<td>M2 screws, M5 bolt and nut, 4 small magnets</td>
+<td>$1–2</td>
+</tr>
+<tr>
+<td>USB-C cable and 5 V supply (often already on hand)</td>
+<td>$0–6</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>about $20–30</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Cloud cost depends on activity, not on recording time. Each captioned
+keyframe or verification frame costs roughly as much as one small image
+prompt. The firmware enforces a daily budget in frames and tokens, and
+the status endpoint reports what has been used.</p>
+<h2 id="privacy-and-security">Privacy and security</h2>
+<ul>
+<li>Video stays on the SD card. Images go only to the model endpoint the
+owner configures, and only when indexing or answering. Captioning can be
+switched off entirely, turning Cambot into a plain local recorder.</li>
+<li>The model endpoint can be any OpenAI-compatible server, including a
+model running on the local network, so no images need to leave the
+building.</li>
+<li>The API requires a bearer token created during setup. The camera
+makes only outbound connections and is meant for a trusted LAN, not for
+exposure to the internet.</li>
+<li>Secrets (Wi-Fi password, API key, token) live in the ESP32’s NVS
+storage. Production builds can turn on flash and NVS encryption.</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li><strong>2.4 GHz Wi-Fi only</strong>, WPA2 or WPA3 Personal. No
+enterprise (802.1X) or captive-portal networks in version 1.</li>
+<li><strong>Frame rate.</strong> 5–10 fps suits robot motion at human
+speeds. Very fast events can fall between frames; robot marks are the
+fix.</li>
+<li><strong>Sparse indexing.</strong> The index is only as good as its
+keyframes and watch list. The verify and scan steps cover the gaps at
+extra cost.</li>
+<li><strong>No audio and no H.264.</strong> The ESP32-S3 has no video
+encoder; clips are MJPEG, and the CLI converts them to MP4 with
+ffmpeg.</li>
+<li><strong>Clock.</strong> The board has no battery-backed clock. Until
+network time is synced after boot, segments are marked unsynced and
+placed using the time of the next sync.</li>
+<li><strong>Model accuracy.</strong> Captions can be wrong. Every answer
+links to the footage so a person can check it.</li>
+</ul>
+<h2 id="open-source-plan-and-roadmap">Open source plan and roadmap</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>License (proposed)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Firmware, CLI, web UI</td>
+<td>Apache-2.0</td>
+</tr>
+<tr>
+<td>Case, mounts, CAD source and STL</td>
+<td>CERN-OHL-P-2.0</td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td>CC BY 4.0</td>
+</tr>
+</tbody>
+</table>
+<ol type="1">
+<li><strong>M0–M1:</strong> Board bring-up, SD rolling buffer, live
+view, REST API (porting the working camera code from the Lloyd robot
+project).</li>
+<li><strong>M2:</strong> Wi-Fi provisioning, <code>cambot</code> CLI,
+browser-based flasher, and the agent-readable setup guide.</li>
+<li><strong>M3:</strong> Activity detection, captioning, watch lists,
+robot marks, and index search.</li>
+<li><strong>M4:</strong> On-board agent, <code>/ask</code>, and the MCP
+server.</li>
+<li><strong>M5:</strong> Over-the-air (OTA) updates, encrypted builds,
+and a second board kit.</li>
+<li><strong>Later:</strong> Caption embeddings, and a multi-camera hub
+so one question can search a whole room.</li>
+</ol>
+<p>Companion documents: the <strong>mechanical spec for Astra</strong>
+(case and mount CAD), the <strong>firmware repository plan</strong>, and
+the <strong>setup guide</strong>, which is written so a person or a
+coding agent can follow it step by step.</p>
+</body>
+</html>

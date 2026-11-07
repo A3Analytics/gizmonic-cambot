@@ -1,4 +1,4 @@
-#include "witness_llm.h"
+#include "cambot_llm.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +32,7 @@ static int append_json(char *dst, size_t cap, size_t *used, const char *text) {
     return 0;
 }
 
-int witness_openai_body(char *dst, size_t cap, const char *model, const char *prompt,
+int cambot_openai_body(char *dst, size_t cap, const char *model, const char *prompt,
                         const char *b64, int max_tokens) {
     size_t used = 0;
     char prefix[128];
@@ -56,7 +56,7 @@ int witness_openai_body(char *dst, size_t cap, const char *model, const char *pr
     return (int)used;
 }
 
-int witness_anthropic_body(char *dst, size_t cap, const char *model, const char *prompt,
+int cambot_anthropic_body(char *dst, size_t cap, const char *model, const char *prompt,
                            const char *b64, int max_tokens) {
     size_t used = 0;
     char prefix[64];
@@ -80,7 +80,7 @@ int witness_anthropic_body(char *dst, size_t cap, const char *model, const char 
     return (int)used;
 }
 
-int witness_jev_body(char *dst, size_t cap, const char *model, const char *question_name,
+int cambot_jev_body(char *dst, size_t cap, const char *model, const char *question_name,
                      const char *instructions, const char *b64) {
     size_t used = 0;
     if (cap == 0) {
@@ -114,9 +114,9 @@ static int append_asset(char *dst, size_t cap, size_t *used, const char *key, co
     return 0;
 }
 
-int witness_jev_request(char *dst, size_t cap, const char *model, const char *photo_b64,
-                        const witness_jev_asset *assets, int asset_count,
-                        const witness_jev_question *questions, int question_count) {
+int cambot_jev_request(char *dst, size_t cap, const char *model, const char *photo_b64,
+                        const cambot_jev_asset *assets, int asset_count,
+                        const cambot_jev_question *questions, int question_count) {
     size_t used = 0;
     int i;
     if (!dst || cap == 0 || !model || !model[0] || !photo_b64 || !questions || question_count <= 0) {
@@ -143,7 +143,7 @@ int witness_jev_request(char *dst, size_t cap, const char *model, const char *ph
     }
     for (i = 0; i < question_count; i++) {
         char box_name[80];
-        const witness_jev_question *question = &questions[i];
+        const cambot_jev_question *question = &questions[i];
         if (!question->name || !question->name[0] || !question->instructions) {
             return -1;
         }

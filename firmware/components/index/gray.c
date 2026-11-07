@@ -1,4 +1,4 @@
-#include "witness_gray.h"
+#include "cambot_gray.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +13,7 @@ static uint8_t luma(uint8_t red, uint8_t green, uint8_t blue) {
     return (uint8_t)((77 * red + 150 * green + 29 * blue) >> 8);
 }
 
-esp_err_t witness_gray_eighth(const uint8_t *jpeg, size_t jpeg_len, uint8_t *gray, size_t gray_cap,
+esp_err_t cambot_gray_eighth(const uint8_t *jpeg, size_t jpeg_len, uint8_t *gray, size_t gray_cap,
                               size_t *gray_len) {
     if (!jpeg || jpeg_len < 2 || !gray || !gray_len) {
         return ESP_ERR_INVALID_ARG;

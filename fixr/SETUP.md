@@ -1,16 +1,16 @@
 ---
-title: "Witness camera: setup and installation guide"
+title: "Gizmonic Cambot: setup and installation guide"
 subtitle: "For people and for coding agents (Cursor, Claude Code, Codex, ...)"
-author: "Witness project · CC BY 4.0"
+author: "Gizmonic Cambot project · CC BY 4.0"
 date: "Guide rev A · targets firmware v0.x · October 2026"
 ---
 
 <div class="note">
 <strong>Status.</strong> This guide describes the v1 setup flow planned in the
-repository plan. Commands under <code>witness</code> ship with milestone M2
+repository plan. Commands under <code>cambot</code> ship with milestone M2
 and are not in this repository yet. Until then, flash the setup test in
 <code>firmware/</code>. It joins Wi-Fi and registers with the registrar on
-this computer. Do not invent <code>witness</code> commands.
+this computer. Do not invent <code>cambot</code> commands.
 </div>
 
 ## Proven on
@@ -28,8 +28,8 @@ value out of both files.
 
 This section is for coding agents. People can skip to section 1.
 
-**Goal:** a Witness camera is recording to its SD card, reachable on the
-user's LAN at `http://witness-XXXX.local/`, and registered as an MCP server in
+**Goal:** a Gizmonic Cambot is recording to its SD card, reachable on the
+user's LAN at `http://cambot-XXXX.local/`, and registered as an MCP server in
 the user's editor.
 
 **Ask the user for these before starting. Never guess them:**
@@ -37,7 +37,7 @@ the user's editor.
 | Input | Notes |
 |---|---|
 | Wi-Fi SSID | Must be a **2.4 GHz** network, WPA2 or WPA3 Personal |
-| Wi-Fi password | Have the user type it into a hidden prompt, or set `WITNESS_WIFI_PASSWORD` themselves |
+| Wi-Fi password | Have the user type it into a hidden prompt, or set `CAMBOT_WIFI_PASSWORD` themselves |
 | Model endpoint | Base URL, model name, API key. Optional; recording works without it. |
 | Time zone | IANA name such as `America/Los_Angeles` |
 | What the camera watches | One or two sentences, for the scene profile |
@@ -54,7 +54,7 @@ the user's editor.
 4. **Verify every step** with its *Expect* check before moving on. If a check
    fails, use that step's *If it fails* table, then section 9. Stop after two
    failed attempts at the same step and report what you saw.
-5. Prefer `witness` CLI commands over raw `esptool` or `curl`. Every command
+5. Prefer `cambot` CLI commands over raw `esptool` or `curl`. Every command
    accepts `--json` for machine-readable output.
 
 **Step outline:** S1 tools → S2 SD card → S3 connect → S4 flash → S5 Wi-Fi →
@@ -64,7 +64,7 @@ S6 verify → S7 model → S8 scene → S9 mount and aim → S10 editor (MCP).
 
 | Item | Notes |
 |---|---|
-| FORIOT ESP32-S3-CAM (OV3660, N16R8) | Or another supported board; see `witness boards` |
+| FORIOT ESP32-S3-CAM (OV3660, N16R8) | Or another supported board; see `cambot boards` |
 | microSD card, 8–128 GB | High-endurance recommended. 32 GB holds about 1.5 days at default settings. |
 | USB-C **data** cable | Charge-only cables are the most common setup failure |
 | Computer | macOS 12+, Linux, or Windows 10+, with Python 3.10+ |
@@ -77,8 +77,8 @@ S6 verify → S7 model → S8 scene → S9 mount and aim → S10 editor (MCP).
 
 ```bash
 python3 -m pip install --user pipx && python3 -m pipx ensurepath
-pipx install witness-cli
-witness doctor
+pipx install cambot-cli
+cambot doctor
 ```
 
 **Expect:** `doctor` ends with `doctor=ok`. It checks Python, esptool, serial
@@ -86,7 +86,7 @@ drivers and ffmpeg (ffmpeg is only needed for MP4 export).
 
 | If it fails | Fix |
 |---|---|
-| `witness: command not found` | Open a new terminal (pipx changed `PATH`), or run `python3 -m pipx run witness-cli doctor` |
+| `cambot: command not found` | Open a new terminal (pipx changed `PATH`), or run `python3 -m pipx run cambot-cli doctor` |
 | `driver=missing ch340` (Windows, older macOS) | Install the WCH CH340/CH341 driver, then replug the board |
 | `ffmpeg=missing` | Optional. macOS `brew install ffmpeg`; Debian/Ubuntu `sudo apt install ffmpeg`; Windows `winget install ffmpeg` |
 
@@ -113,7 +113,7 @@ time a program opens it.
 **Run:**
 
 ```bash
-witness ports --json
+cambot ports --json
 ```
 
 **Expect:** exactly one entry with `"kind": "ttl"`, VID `1a86`. Typical names
@@ -134,14 +134,14 @@ if the board was in use.
 **Run:**
 
 ```bash
-witness flash --port auto --board foriot_s3cam
+cambot flash --port auto --board foriot_s3cam
 ```
 
 This downloads the latest release and runs esptool at **115200 baud**. This
 board's CH340 link drops at higher speeds. A full flash takes about two
 minutes.
 
-**Expect:** the command ends with `flash=ok` and `boot=HELLO witness`.
+**Expect:** the command ends with `flash=ok` and `boot=HELLO cambot`.
 
 | If it fails | Fix |
 |---|---|
@@ -158,16 +158,16 @@ port. It flashes and then asks for Wi-Fi in the same page.
 **Run** (the password never appears on the command line):
 
 ```bash
-witness provision --port auto --ssid "<SSID from user>" --tz "<IANA zone>"
-# prompts for the password, or reads WITNESS_WIFI_PASSWORD if it is set
+cambot provision --port auto --ssid "<SSID from user>" --tz "<IANA zone>"
+# prompts for the password, or reads CAMBOT_WIFI_PASSWORD if it is set
 ```
 
 **Expect** (JSON with `--json`):
 
 ```text
 wifi=ip=192.168.1.42
-mdns=witness-ab12.local
-token=saved keychain:witness/witness-ab12
+mdns=cambot-ab12.local
+token=saved keychain:cambot/cambot-ab12
 provision=ok
 ```
 
@@ -182,7 +182,7 @@ it up by camera name.
 | `provision=timeout` with no reason | Weak signal or captive portal | Move closer for setup. Guest networks with sign-in pages are not supported. |
 
 *Fallback without a computer:* hold **BOOT** for 5 seconds after power-on.
-The camera opens a Wi-Fi network `Witness-Setup-XXXX`. Join it from a phone and
+The camera opens a Wi-Fi network `Cambot-Setup-XXXX`. Join it from a phone and
 use the page at `http://192.168.4.1`.
 
 ## S6. Verify the camera ⚠ (SD format if needed)
@@ -190,20 +190,20 @@ use the page at `http://192.168.4.1`.
 **Run:**
 
 ```bash
-witness status witness-ab12 --json
-witness snap witness-ab12 -o witness-test.jpg
+cambot status cambot-ab12 --json
+cambot snap cambot-ab12 -o cambot-test.jpg
 ```
 
 **Expect** in `status`: `"wifi.rssi"` better than −75, `"time.synced": true`,
-`"sd.state": "ok"`, `"recording": true`. `witness-test.jpg` is a sharp,
+`"sd.state": "ok"`, `"recording": true`. `cambot-test.jpg` is a sharp,
 correctly colored image. **Agents:** open the image and describe it to the user
 to confirm the camera works.
 
 | If it fails | Fix |
 |---|---|
 | `"sd.state": "none"` | Card not seated. Unplug the board, reseat the card, replug. |
-| `"sd.state": "unformatted"` | ⚠ With the user's OK: `witness sd format witness-ab12 --confirm`. This erases the card. |
-| `"time.synced": false` after 2 minutes | The network blocks NTP. Set `witness config set time.ntp <server>`, or use the router's address. |
+| `"sd.state": "unformatted"` | ⚠ With the user's OK: `cambot sd format cambot-ab12 --confirm`. This erases the card. |
+| `"time.synced": false` after 2 minutes | The network blocks NTP. Set `cambot config set time.ntp <server>`, or use the router's address. |
 | Image green or tinted | Normal for the first few seconds after boot; snap again |
 | Image black or `camera=fail` | Unplug. Reseat the camera flex cable (contacts toward the board) and the module. |
 | `mdns` name does not resolve | Use the IP from S5. Windows without Bonjour, and some routers, block mDNS. |
@@ -217,20 +217,20 @@ your own network.
 **Run** (the key is read from stdin, never from an argument):
 
 ```bash
-witness config set witness-ab12 model.base_url "<base URL>" model.name "<vision model>"
-printf '%s' "$WITNESS_MODEL_KEY" | witness config set witness-ab12 model.api_key -
-witness config set witness-ab12 budget.frames_per_day 2000
-witness ask witness-ab12 "What do you see right now?"
+cambot config set cambot-ab12 model.base_url "<base URL>" model.name "<vision model>"
+printf '%s' "$CAMBOT_MODEL_KEY" | cambot config set cambot-ab12 model.api_key -
+cambot config set cambot-ab12 budget.frames_per_day 2000
+cambot ask cambot-ab12 "What do you see right now?"
 ```
 
 **Expect:** a one-paragraph description of the scene, and `model=ok` in
-`witness status`.
+`cambot status`.
 
 | If it fails | Fix |
 |---|---|
 | `model=auth` | Wrong key. The user re-enters it. |
 | `model=no_vision` | The chosen model does not accept images. Pick one listed in `docs/models.md`. |
-| `model=tls` | Private server with its own CA: `witness config set witness-ab12 model.ca_pem @ca.pem` |
+| `model=tls` | Private server with its own CA: `cambot config set cambot-ab12 model.ca_pem @ca.pem` |
 
 ## S8. Describe the scene and what to watch for
 
@@ -238,7 +238,7 @@ The scene profile and watch list are what make search accurate. Write them with
 the user.
 
 ```bash
-witness profile set witness-ab12 --file scene.yaml
+cambot profile set cambot-ab12 --file scene.yaml
 ```
 
 ```yaml
@@ -258,14 +258,14 @@ index:
 ```
 
 **Expect:** `profile=ok`. After a few minutes of activity,
-`witness events witness-ab12 --since -10m` lists events.
+`cambot events cambot-ab12 --since -10m` lists events.
 
 **Robot marks (recommended):** have the robot's controller call the camera
 whenever it starts a step. This gives exact, searchable labels:
 
 ```bash
-curl -s -X POST http://witness-ab12.local/api/v1/marks \
-  -H "Authorization: Bearer $WITNESS_TOKEN" \
+curl -s -X POST http://cambot-ab12.local/api/v1/marks \
+  -H "Authorization: Bearer $CAMBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"label":"step 12: pick tip"}'
 ```
@@ -275,8 +275,8 @@ curl -s -X POST http://witness-ab12.local/api/v1/marks \
 1. Choose a foot: the **screw clamp** for edges up to 35 mm, the **magnet puck**
    for steel, or any GoPro-style mount.
 2. Join the foot to the camera's knuckle with the M5 bolt, leaving it loose.
-3. Open the live view at `http://witness-ab12.local/` (or run
-   `witness live witness-ab12`) and aim the camera. Then tighten the bolt.
+3. Open the live view at `http://cambot-ab12.local/` (or run
+   `cambot live cambot-ab12`) and aim the camera. Then tighten the bolt.
 
 **Placement rules:**
 
@@ -295,7 +295,7 @@ visible and in focus.
 **Run:**
 
 ```bash
-witness mcp-config witness-ab12
+cambot mcp-config cambot-ab12
 ```
 
 It prints an entry for `.cursor/mcp.json` (project) or `~/.cursor/mcp.json`
@@ -304,20 +304,20 @@ It prints an entry for `.cursor/mcp.json` (project) or `~/.cursor/mcp.json`
 ```json
 {
   "mcpServers": {
-    "witness-ab12": {
-      "url": "http://witness-ab12.local/mcp",
-      "headers": { "Authorization": "Bearer ${env:WITNESS_TOKEN}" }
+    "cambot-ab12": {
+      "url": "http://cambot-ab12.local/mcp",
+      "headers": { "Authorization": "Bearer ${env:CAMBOT_TOKEN}" }
     }
   }
 }
 ```
 
 The token is referenced through an environment variable, so it is never written
-into the file. Export `WITNESS_TOKEN` from the keychain with
-`witness token export witness-ab12` in the shell that launches the editor.
+into the file. Export `CAMBOT_TOKEN` from the keychain with
+`cambot token export cambot-ab12` in the shell that launches the editor.
 
 **Expect:** the editor lists tools such as `search_index`, `inspect_window` and
-`make_clip`. Test it by asking the agent: *"Using witness-ab12, show me the last
+`make_clip`. Test it by asking the agent: *"Using cambot-ab12, show me the last
 time something moved."*
 
 ## 9. Troubleshooting reference
@@ -326,11 +326,11 @@ time something moved."*
 |---|---|---|
 | Board resets whenever a serial monitor opens | Monitor attached to the OTG port | Use the TTL port for logs |
 | Upload fails at 921600 | CH340 limit on this board | Use 115200 (the CLI default) |
-| Random reboots with SD inserted | SD driver started with default pins, which overlap PSRAM | Firmware bug; report it with `witness logs` output |
-| `recording=false`, `sd.full=true` | Eviction disabled or the card is too small | `witness config set storage.reserve_pct 10` |
+| Random reboots with SD inserted | SD driver started with default pins, which overlap PSRAM | Firmware bug; report it with `cambot logs` output |
+| `recording=false`, `sd.full=true` | Eviction disabled or the card is too small | `cambot config set storage.reserve_pct 10` |
 | Index stopped, recording fine | Daily budget reached | Shown in `status.budget`; raise it or wait for the reset |
-| Clips stutter in the browser | Wi-Fi throughput | Use `witness pull` / `export`, or lower `capture.fps` |
-| Lost token | | ⚠ `witness token rotate witness-ab12 --port auto` over USB |
+| Clips stutter in the browser | Wi-Fi throughput | Use `cambot pull` / `export`, or lower `capture.fps` |
+| Lost token | | ⚠ `cambot token rotate cambot-ab12 --port auto` over USB |
 
 ## Appendix A. Log keys
 
@@ -339,11 +339,11 @@ grepped:
 
 | Key | Values |
 |---|---|
-| `boot` | `HELLO witness`, firmware version, board |
+| `boot` | `HELLO cambot`, firmware version, board |
 | `camera` | `ok pid=0x3660`, `fail err=...` |
 | `sd` | `ok size_gb=29.7`, `none`, `unformatted` |
 | `wifi` | `connecting`, `ip=...`, `disconnected reason=N` |
-| `mdns` | `witness-XXXX.local` |
+| `mdns` | `cambot-XXXX.local` |
 | `time` | `synced`, `unsynced` |
 | `rec` | `segment=... frames=300 dropped=0` |
 | `index` | `keyframes=... budget_left=...` |

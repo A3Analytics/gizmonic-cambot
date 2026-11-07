@@ -8,10 +8,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from host.witness_index.images import shape_jpeg
-from host.witness_mcp.server import McpServer
-from host.witness_store.api import Camera
-from host.witness_store.format import Card, iso
+from host.cambot_index.images import shape_jpeg
+from host.cambot_mcp.server import McpServer
+from host.cambot_store.api import Camera
+from host.cambot_store.format import Card, iso
 
 TOKEN = "mcp-token"
 T0 = datetime(2026, 10, 29, 19, 7, 41, tzinfo=timezone.utc)
@@ -58,7 +58,7 @@ def test_initialize_and_tools_list(tmp_path):
     assert status == 200
     result = json.loads(body)["result"]
     assert result["protocolVersion"] == "2025-03-26"
-    assert result["serverInfo"]["name"] == "witness"
+    assert result["serverInfo"]["name"] == "cambot"
     status, _kind, body = _rpc(server, "tools/list")
     names = [tool["name"] for tool in json.loads(body)["result"]["tools"]]
     assert names == [

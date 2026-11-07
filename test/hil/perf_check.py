@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Live A/B check for high-performance preview mode.
 
-Does not flash the board. Set WITNESS_CAMERA_URL and WITNESS_CAMERA_PASSWORD.
+Does not flash the board. Set CAMBOT_CAMERA_URL and CAMBOT_CAMERA_PASSWORD.
 Never prints the password.
 """
 
@@ -45,13 +45,13 @@ def _frame_latencies(base: str, token: str, n: int = 20) -> list[float]:
 
 
 def main() -> int:
-    base = os.environ.get("WITNESS_CAMERA_URL", "").rstrip("/")
-    token = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    base = os.environ.get("CAMBOT_CAMERA_URL", "").rstrip("/")
+    token = os.environ.get("CAMBOT_CAMERA_PASSWORD", "")
     if not base:
-        print("perf_check=skipped reason=WITNESS_CAMERA_URL_unset")
+        print("perf_check=skipped reason=CAMBOT_CAMERA_URL_unset")
         return 0
     if not token:
-        print("perf_check=skipped reason=WITNESS_CAMERA_PASSWORD_unset")
+        print("perf_check=skipped reason=CAMBOT_CAMERA_PASSWORD_unset")
         return 0
 
     try:

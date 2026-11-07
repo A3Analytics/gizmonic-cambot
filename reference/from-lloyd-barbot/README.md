@@ -1,6 +1,6 @@
 # Reference files from lloyd-barbot
 
-These are the files the Witness documents were written from. The rest of that
+These are the files the Gizmonic Cambot documents were written from. The rest of that
 project (motors, Pico controller, chassis, captures) stayed there.
 
 | File | Why it is here |

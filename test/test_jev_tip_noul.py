@@ -1,7 +1,7 @@
 """JEV must separate tip-on vs tip-off frames for the pipette noul.
 
 Uses the recorded yes/no fixtures (same framing as the registrar demo).
-Skipped when WITNESS_JEV_KEY is unset. Marked live because it calls TypeSafe.
+Skipped when CAMBOT_JEV_KEY is unset. Marked live because it calls TypeSafe.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from host.witness_models.jev import JEV_IMAGES_HEADER, JEV_MODEL, JEV_URL
+from host.cambot_models.jev import JEV_IMAGES_HEADER, JEV_MODEL, JEV_URL
 
 pytestmark = pytest.mark.live
 
@@ -69,13 +69,13 @@ def _score(photo: bytes, yes: bytes, no: bytes, api_key: str) -> float:
 
 
 def test_jev_scores_tip_yes_higher_than_tip_no():
-    api_key = os.environ.get("WITNESS_JEV_KEY", "").strip()
+    api_key = os.environ.get("CAMBOT_JEV_KEY", "").strip()
     if not api_key:
         key_file = Path("jev_api_key.txt")
         if key_file.exists():
             api_key = key_file.read_text(encoding="utf-8").strip()
     if not api_key:
-        pytest.skip("WITNESS_JEV_KEY is not set")
+        pytest.skip("CAMBOT_JEV_KEY is not set")
     assert YES.is_file() and NO.is_file()
     yes_jpeg = YES.read_bytes()
     no_jpeg = NO.read_bytes()

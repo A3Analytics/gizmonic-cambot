@@ -1,7 +1,7 @@
 # Agent instructions
 
-This repository is the Witness camera specification, the bring-up firmware in
-`firmware/`, and the printable case in `hardware/`. The `witness` command
+This repository is the Gizmonic Cambot specification, the bring-up firmware in
+`firmware/`, and the printable case in `hardware/`. The `cambot` command
 described in the documents does not exist here yet.
 
 ## Which document to follow
@@ -9,11 +9,11 @@ described in the documents does not exist here yet.
 - Setting up a physical camera: follow `fixr/SETUP.md` from the top. Section 0
   is the contract. Read the profile for this computer next
   (`fixr/profiles/waterbear.json` and `fixr/profiles/waterbear.md` on this
-  machine). The `witness` commands in that guide ship with firmware
+  machine). The `cambot` commands in that guide ship with firmware
   milestone M2; until then, say so instead of inventing commands.
 - Designing or changing the case and mounts: `docs/src/astra-mechanical-spec.md`.
   Dimensions marked TBV are not confirmed. Do not replace them with guesses.
-- Printing the case: `hardware/witness-minimum-petg-kit/README.md` lists the
+- Printing the case: `hardware/cambot-minimum-petg-kit/README.md` lists the
   plates, parts, PETG settings, hardware, and assembly. Its STL, STEP, and 3MF
   files are a frozen release checked by `manifest.json`. To change a part, edit
   the generator under `source/`, regenerate, and update the exports and

@@ -7,9 +7,9 @@ import struct
 import subprocess
 from datetime import datetime, timedelta, timezone
 
-from host.witness_store.api import Camera
-from host.witness_store.format import IDX, Card
-from host.witness_store.timeparse import parse_bound
+from host.cambot_store.api import Camera
+from host.cambot_store.format import IDX, Card
+from host.cambot_store.timeparse import parse_bound
 from zoneinfo import ZoneInfo
 
 LA = ZoneInfo("America/Los_Angeles")
@@ -61,7 +61,7 @@ def test_minute_segment_roundtrip_and_queries(tmp_path):
     assert frames[0].motion == 0.41
     assert frames[0].offset == 0
     assert frames[1].offset == len(JPEG_A)
-    seg = tmp_path / "witness" / "rec" / "2026-10-29" / "19" / "2026-10-29T19-04-00Z.mjpg"
+    seg = tmp_path / "cambot" / "rec" / "2026-10-29" / "19" / "2026-10-29T19-04-00Z.mjpg"
     assert seg.read_bytes() == JPEG_A + JPEG_B
     idx = seg.with_suffix(".idx")
     first = IDX.unpack_from(idx.read_bytes(), 0)
@@ -115,11 +115,11 @@ def test_eviction_keeps_index_then_drops_it_after_keep_days(tmp_path):
     for _ in range(3):
         card.add_frame(hour2, blob)
     card.maintain(hour2)
-    assert not (tmp_path / "witness" / "rec" / "2026-10-29" / "18").exists()
-    assert (tmp_path / "witness" / "index" / "2026-10-29" / "18.jsonl").exists()
-    assert (tmp_path / "witness" / "rec" / "2026-10-29" / "19").exists()
+    assert not (tmp_path / "cambot" / "rec" / "2026-10-29" / "18").exists()
+    assert (tmp_path / "cambot" / "index" / "2026-10-29" / "18.jsonl").exists()
+    assert (tmp_path / "cambot" / "rec" / "2026-10-29" / "19").exists()
     card.maintain(hour2 + timedelta(days=31))
-    assert not (tmp_path / "witness" / "index" / "2026-10-29" / "18.jsonl").exists()
+    assert not (tmp_path / "cambot" / "index" / "2026-10-29" / "18.jsonl").exists()
 
 
 def test_api_auth_clip_and_two_minute_recording(tmp_path):

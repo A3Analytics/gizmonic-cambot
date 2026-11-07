@@ -7,9 +7,9 @@ import logging
 
 import pytest
 
-from host.witness_models.errors import ModelCallError
-from host.witness_models.http import HttpResponse
-from host.witness_models.openai import OpenAIAdapter
+from host.cambot_models.errors import ModelCallError
+from host.cambot_models.http import HttpResponse
+from host.cambot_models.openai import OpenAIAdapter
 
 KEY = "sk-unit-test-secret"
 JPEG = b"\xff\xd8\xff\xd9"
@@ -49,7 +49,7 @@ def test_openai_body_has_image_and_model():
 
 
 def test_openai_parses_text(caplog):
-    caplog.set_level(logging.INFO, logger="witness.models")
+    caplog.set_level(logging.INFO, logger="cambot.models")
     adapter, _transport = _adapter([(200, _chat("a red square"))])
     result = adapter.complete_text(JPEG, "what do you see")
     assert result.text == "a red square"
@@ -101,11 +101,11 @@ def test_openai_caption_accepts_schema_on_second_try():
 
 
 def test_tls_maps_without_logging_the_key(caplog):
-    caplog.set_level(logging.INFO, logger="witness.models")
+    caplog.set_level(logging.INFO, logger="cambot.models")
 
     class TlsTransport:
         def post(self, url, headers, body):
-            from host.witness_models.errors import TlsFailure
+            from host.cambot_models.errors import TlsFailure
 
             raise TlsFailure("handshake")
 

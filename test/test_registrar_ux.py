@@ -89,7 +89,7 @@ class FakeCamera(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("X-Witness-Preview", "cached")
+            self.send_header("X-Cambot-Preview", "cached")
             self.end_headers()
             self.wfile.write(body)
             return
@@ -163,16 +163,16 @@ def stack(tmp_path: Path):
     registrar_thread = threading.Thread(target=registrar.serve_forever, daemon=True)
     registrar_thread.start()
     host, port = registrar.server_address
-    os.environ["WITNESS_CAMERA_PASSWORD"] = PASSWORD
-    registry.upsert("witness-live", f"{camera_ip}:{camera_port}", "setup", "foriot_s3cam")
+    os.environ["CAMBOT_CAMERA_PASSWORD"] = PASSWORD
+    registry.upsert("cambot-live", f"{camera_ip}:{camera_port}", "setup", "foriot_s3cam")
     registry.upsert(
-        "witness-dead",
+        "cambot-dead",
         "127.0.0.1:9",
         "setup",
         "foriot_s3cam",
     )
     with registry._lock:
-        registry.cameras["witness-dead"]["last_seen"] = "2000-01-01T00:00:00Z"
+        registry.cameras["cambot-dead"]["last_seen"] = "2000-01-01T00:00:00Z"
         registry.save()
 
     base = f"http://{host}:{port}"
@@ -229,20 +229,20 @@ def test_camera_is_stale_helper():
 
 def test_indexing_and_jev_switches_round_trip(stack):
     base = stack["base"]
-    status, body = _json(f"{base}/api/cameras/witness-live/indexing")
+    status, body = _json(f"{base}/api/cameras/cambot-live/indexing")
     assert status == 200 and body["enabled"] is False
     status, body = _json(
-        f"{base}/api/cameras/witness-live/indexing",
+        f"{base}/api/cameras/cambot-live/indexing",
         method="POST",
         payload={"enabled": True},
     )
     assert status == 200 and body["enabled"] is True
     assert stack["camera"].indexing is True
 
-    status, body = _json(f"{base}/api/cameras/witness-live/jev")
+    status, body = _json(f"{base}/api/cameras/cambot-live/jev")
     assert status == 200 and body["enabled"] is False
     status, body = _json(
-        f"{base}/api/cameras/witness-live/jev",
+        f"{base}/api/cameras/cambot-live/jev",
         method="POST",
         payload={"enabled": True},
     )
@@ -250,7 +250,7 @@ def test_indexing_and_jev_switches_round_trip(stack):
     assert stack["camera"].jev is True
 
     status, body = _json(
-        f"{base}/api/cameras/witness-live/jev",
+        f"{base}/api/cameras/cambot-live/jev",
         method="POST",
         payload={"enabled": False},
     )
@@ -260,7 +260,7 @@ def test_indexing_and_jev_switches_round_trip(stack):
 def test_dead_camera_switch_returns_json_error(stack):
     base = stack["base"]
     req = urllib.request.Request(
-        f"{base}/api/cameras/witness-dead/indexing",
+        f"{base}/api/cameras/cambot-dead/indexing",
         data=json.dumps({"enabled": True}).encode(),
         method="POST",
         headers={"Content-Type": "application/json"},
@@ -279,13 +279,13 @@ def test_remove_camera_from_registry(stack):
     status, listing = _json(f"{base}/api/cameras")
     assert status == 200
     ids = {cam["id"] for cam in listing["cameras"]}
-    assert "witness-dead" in ids
-    status, body = _json(f"{base}/api/cameras/witness-dead", method="DELETE")
+    assert "cambot-dead" in ids
+    status, body = _json(f"{base}/api/cameras/cambot-dead", method="DELETE")
     assert status == 200 and body["ok"] is True
     status, listing = _json(f"{base}/api/cameras")
     ids = {cam["id"] for cam in listing["cameras"]}
-    assert "witness-dead" not in ids
-    assert "witness-live" in ids
+    assert "cambot-dead" not in ids
+    assert "cambot-live" in ids
 
 
 def test_dev_mode_persist_and_idle_helpers(tmp_path: Path):
@@ -336,13 +336,13 @@ def test_dev_mode_api_and_idle_stop(stack):
     assert load_dev_mode(stack["tmp_path"] / "dev_mode.json") is True
 
     status, body = _json(
-        f"{base}/api/cameras/witness-live/indexing",
+        f"{base}/api/cameras/cambot-live/indexing",
         method="POST",
         payload={"enabled": True},
     )
     assert status == 200 and body["enabled"] is True
     status, body = _json(
-        f"{base}/api/cameras/witness-live/jev",
+        f"{base}/api/cameras/cambot-live/jev",
         method="POST",
         payload={"enabled": True},
     )
@@ -383,7 +383,7 @@ def test_high_perf_api_and_camera_push(stack):
     assert load_high_perf(stack["tmp_path"] / "high_perf.json") is True
     assert stack["camera"].perf is True
 
-    status, body = _json(f"{base}/api/cameras/witness-live/perf")
+    status, body = _json(f"{base}/api/cameras/cambot-live/perf")
     assert status == 200 and body["enabled"] is True and body["capture_ms"] == 200
 
     status, body = _json(f"{base}/api/high-perf", method="POST", payload={"enabled": False})
@@ -435,15 +435,15 @@ def test_query_reads_recent_index_once(monkeypatch):
 def test_caption_proxy_passes_every_new_jev_score(stack):
     """Each new on-camera record must reach the page; none cached or repeated."""
     base = stack["base"]
-    req = urllib.request.Request(f"{base}/api/cameras/witness-live/caption")
+    req = urllib.request.Request(f"{base}/api/cameras/cambot-live/caption")
     with urllib.request.urlopen(req, timeout=5) as resp:
         assert resp.status == 204
 
-    status, body = _json(f"{base}/api/cameras/witness-live/jev", method="POST", payload={"enabled": True})
+    status, body = _json(f"{base}/api/cameras/cambot-live/jev", method="POST", payload={"enabled": True})
     assert status == 200 and body["enabled"] is True
     seen = []
     for _ in range(10):
-        status, row = _json(f"{base}/api/cameras/witness-live/caption")
+        status, row = _json(f"{base}/api/cameras/cambot-live/caption")
         assert status == 200
         seen.append((row["t"], row["watch"]["pipette tip"]))
     stamps = [t for t, _ in seen]

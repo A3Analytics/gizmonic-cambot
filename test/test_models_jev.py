@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from host.witness_models.errors import ModelCallError
-from host.witness_models.http import HttpResponse
-from host.witness_models.jev import JEV_IMAGES_HEADER, JEV_MODEL, JEV_URL, JevAdapter
-from host.witness_models.questions import NoulQuestion
+from host.cambot_models.errors import ModelCallError
+from host.cambot_models.http import HttpResponse
+from host.cambot_models.jev import JEV_IMAGES_HEADER, JEV_MODEL, JEV_URL, JevAdapter
+from host.cambot_models.questions import NoulQuestion
 
 KEY = "jev-unit-test-secret"
 JPEG = b"\xff\xd8\xff\xd9"
@@ -80,7 +80,7 @@ def test_jev_auth_and_dropped_json():
 def test_wire_constants_match_the_firmware_header():
     from pathlib import Path
 
-    header = Path("firmware/components/llm/include/witness_llm.h").read_text(encoding="utf-8")
+    header = Path("firmware/components/llm/include/cambot_llm.h").read_text(encoding="utf-8")
     assert JEV_URL in header
     assert JEV_MODEL in header
     assert JEV_IMAGES_HEADER in header

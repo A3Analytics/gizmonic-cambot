@@ -11,17 +11,17 @@ profile="$(mktemp -d)"
 trap 'rm -rf "$profile"' EXIT
 
 docs=(
-  "$src/whitepaper.md:witness-whitepaper"
-  "$src/astra-mechanical-spec.md:witness-astra-mechanical-spec"
-  "$src/firmware-repo-plan.md:witness-firmware-repo-plan"
-  "$here/../fixr/SETUP.md:witness-setup-guide"
+  "$src/whitepaper.md:cambot-whitepaper"
+  "$src/astra-mechanical-spec.md:cambot-astra-mechanical-spec"
+  "$src/firmware-repo-plan.md:cambot-firmware-repo-plan"
+  "$here/../fixr/SETUP.md:cambot-setup-guide"
 )
 
 for entry in "${docs[@]}"; do
   input="${entry%%:*}"
   name="${entry##*:}"
   toc=()
-  if [[ "$name" != "witness-whitepaper" ]]; then
+  if [[ "$name" != "cambot-whitepaper" ]]; then
     toc=(--toc --toc-depth=2)
   fi
   pandoc "$input" \

@@ -6,38 +6,38 @@ import os
 
 import pytest
 
-from host.witness_index.images import shape_jpeg
-from host.witness_models.anthropic import AnthropicAdapter
-from host.witness_models.jev import JevAdapter
-from host.witness_models.openai import OpenAIAdapter
-from host.witness_models.questions import questions_from_description
+from host.cambot_index.images import shape_jpeg
+from host.cambot_models.anthropic import AnthropicAdapter
+from host.cambot_models.jev import JevAdapter
+from host.cambot_models.openai import OpenAIAdapter
+from host.cambot_models.questions import questions_from_description
 
 pytestmark = pytest.mark.live
 
 
 def test_openai_smoke():
-    key = os.environ.get("WITNESS_MODEL_KEY")
+    key = os.environ.get("CAMBOT_MODEL_KEY")
     if not key:
-        pytest.skip("WITNESS_MODEL_KEY is not set")
+        pytest.skip("CAMBOT_MODEL_KEY is not set")
     result = OpenAIAdapter(key).complete_text(shape_jpeg(), "What color is the square? One word.")
     assert result.status == "ok"
     assert result.text.strip()
 
 
 def test_claude_smoke():
-    key = os.environ.get("WITNESS_ANTHROPIC_KEY")
+    key = os.environ.get("CAMBOT_ANTHROPIC_KEY")
     if not key:
-        pytest.skip("WITNESS_ANTHROPIC_KEY is not set")
+        pytest.skip("CAMBOT_ANTHROPIC_KEY is not set")
     result = AnthropicAdapter(key).complete_text(shape_jpeg(), "What color is the square? One word.")
     assert result.status == "ok"
     assert result.text.strip()
 
 
 def test_jev_smoke():
-    key = os.environ.get("WITNESS_JEV_KEY")
+    key = os.environ.get("CAMBOT_JEV_KEY")
     if not key:
-        pytest.skip("WITNESS_JEV_KEY is not set")
-    from host.witness_models.questions import NoulQuestion
+        pytest.skip("CAMBOT_JEV_KEY is not set")
+    from host.cambot_models.questions import NoulQuestion
 
     question = NoulQuestion("square", "Is there a red square in `photo`?", "red square", "yes")
     scores = JevAdapter(key).ask(shape_jpeg(), [question])
@@ -45,13 +45,13 @@ def test_jev_smoke():
 
 
 def test_jev_agrees_with_a_larger_model():
-    jev_key = os.environ.get("WITNESS_JEV_KEY")
+    jev_key = os.environ.get("CAMBOT_JEV_KEY")
     if not jev_key:
-        pytest.skip("WITNESS_JEV_KEY is not set")
-    openai_key = os.environ.get("WITNESS_MODEL_KEY")
-    anthropic_key = os.environ.get("WITNESS_ANTHROPIC_KEY")
+        pytest.skip("CAMBOT_JEV_KEY is not set")
+    openai_key = os.environ.get("CAMBOT_MODEL_KEY")
+    anthropic_key = os.environ.get("CAMBOT_ANTHROPIC_KEY")
     if not openai_key and not anthropic_key:
-        pytest.skip("neither WITNESS_MODEL_KEY nor WITNESS_ANTHROPIC_KEY is set")
+        pytest.skip("neither CAMBOT_MODEL_KEY nor CAMBOT_ANTHROPIC_KEY is set")
     jpeg = shape_jpeg()
     if openai_key:
         description = OpenAIAdapter(openai_key).describe(jpeg)

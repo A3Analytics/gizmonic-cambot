@@ -6,18 +6,18 @@ import json
 import subprocess
 from datetime import datetime, timedelta, timezone
 
-from host.witness_index.budget import Budget
-from host.witness_index.events import merge_events
-from host.witness_index.images import shape_jpeg
-from host.witness_index.jsonutil import INDEX_FIELDS
-from host.witness_index.keyframes import keyframe_due
-from host.witness_index.motion import motion_score
-from host.witness_index.pipeline import Indexer
-from host.witness_models.errors import ModelCallError
-from host.witness_models.jev import ScoredFrames
-from host.witness_models.questions import NoulQuestion
-from host.witness_store.api import Camera
-from host.witness_store.format import Card, iso
+from host.cambot_index.budget import Budget
+from host.cambot_index.events import merge_events
+from host.cambot_index.images import shape_jpeg
+from host.cambot_index.jsonutil import INDEX_FIELDS
+from host.cambot_index.keyframes import keyframe_due
+from host.cambot_index.motion import motion_score
+from host.cambot_index.pipeline import Indexer
+from host.cambot_models.errors import ModelCallError
+from host.cambot_models.jev import ScoredFrames
+from host.cambot_models.questions import NoulQuestion
+from host.cambot_store.api import Camera
+from host.cambot_store.format import Card, iso
 
 QUESTION = NoulQuestion("tip_pickup", "Is a tip being picked up in `photo`?", "tip pickup", "yes")
 T0 = datetime(2026, 10, 29, 19, 7, 41, tzinfo=timezone.utc)

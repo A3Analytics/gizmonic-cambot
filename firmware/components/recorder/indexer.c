@@ -1,4 +1,4 @@
-#include "witness_recorder.h"
+#include "cambot_recorder.h"
 
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 
@@ -15,9 +15,9 @@
 #include "freertos/task.h"
 #include "esp_heap_caps.h"
 #include "mbedtls/base64.h"
-#include "witness_alert.h"
-#include "witness_llm.h"
-#include "witness_llm_client.h"
+#include "cambot_alert.h"
+#include "cambot_llm.h"
+#include "cambot_llm_client.h"
 
 /* One pending keyframe: a newer frame replaces it, so JEV always scores the
  * freshest picture instead of working through a backlog. */
@@ -82,7 +82,7 @@ static const char *CAPTION_PROMPT =
     "Return only a JSON object with keys caption (string), objects (array of strings), "
     "actions (array of strings), and robot_state (string). No markdown.";
 
-void witness_indexer_set_keys(const char *openai, const char *jev) {
+void cambot_indexer_set_keys(const char *openai, const char *jev) {
     openai_key = openai ? openai : "";
     jev_key = jev ? jev : "";
 }
@@ -92,12 +92,12 @@ static void load_enabled(void) {
     index_enabled = false;
 }
 
-bool witness_indexer_enabled(void) {
+bool cambot_indexer_enabled(void) {
     return index_enabled;
 }
 
-bool witness_indexer_set_enabled(bool enabled) {
-    FILE *file = fopen(WITNESS_ROOT "/index_enabled", "w");
+bool cambot_indexer_set_enabled(bool enabled) {
+    FILE *file = fopen(CAMBOT_ROOT "/index_enabled", "w");
     if (file) {
         fputc(enabled ? '1' : '0', file);
         fputc('\n', file);
@@ -116,12 +116,12 @@ static void load_jev_enabled(void) {
     jev_enabled = false;
 }
 
-bool witness_jev_enabled(void) {
+bool cambot_jev_enabled(void) {
     return jev_enabled;
 }
 
-bool witness_jev_set_enabled(bool enabled) {
-    FILE *file = fopen(WITNESS_ROOT "/jev_enabled", "w");
+bool cambot_jev_set_enabled(bool enabled) {
+    FILE *file = fopen(CAMBOT_ROOT "/jev_enabled", "w");
     if (file) {
         fputc(enabled ? '1' : '0', file);
         fputc('\n', file);
@@ -138,7 +138,7 @@ static bool either_index(void) {
     return index_enabled || jev_enabled;
 }
 
-bool witness_index_copy_latest(char *dst, size_t cap) {
+bool cambot_index_copy_latest(char *dst, size_t cap) {
     if (!dst || cap == 0) {
         return false;
     }
@@ -189,7 +189,7 @@ static void remember_recent(const char *json) {
     xSemaphoreGive(recent_lock);
 }
 
-char *witness_index_recent_json(const char *query) {
+char *cambot_index_recent_json(const char *query) {
     const char **match = malloc(RECENT_MAX * sizeof(char *));
     int found = 0;
     size_t bytes = 3;
@@ -256,7 +256,7 @@ static int cmp_index_file(const void *left, const void *right) {
 
 static int list_index_files(index_file_t **out) {
     *out = NULL;
-    DIR *days = opendir(WITNESS_ROOT "/index");
+    DIR *days = opendir(CAMBOT_ROOT "/index");
     if (!days) {
         return 0;
     }
@@ -269,7 +269,7 @@ static int list_index_files(index_file_t **out) {
             continue;
         }
         char day_path[160];
-        snprintf(day_path, sizeof day_path, WITNESS_ROOT "/index/%s", day->d_name);
+        snprintf(day_path, sizeof day_path, CAMBOT_ROOT "/index/%s", day->d_name);
         DIR *hours = opendir(day_path);
         if (!hours) {
             continue;
@@ -343,7 +343,7 @@ static bool cursor_path(const char *cursor, char *path, size_t path_cap, long *o
     return true;
 }
 
-char *witness_index_read_page(const char *cursor, int limit) {
+char *cambot_index_read_page(const char *cursor, int limit) {
     if (limit < 1) {
         limit = 1;
     }
@@ -390,7 +390,7 @@ char *witness_index_read_page(const char *cursor, int limit) {
     long parked_at = 0;
     while (idx < count && kept < limit && bytes < PAGE_BYTES) {
         char full[192];
-        snprintf(full, sizeof full, WITNESS_ROOT "/index/%s", files[idx].rel);
+        snprintf(full, sizeof full, CAMBOT_ROOT "/index/%s", files[idx].rel);
         FILE *file = fopen(full, "rb");
         if (!file) {
             idx++;
@@ -553,14 +553,14 @@ static int fill_question(question_t *question, cJSON *item) {
 }
 
 static int load_questions(question_t *questions, int cap) {
-    FILE *file = fopen(WITNESS_NOULS_JSON, "rb");
+    FILE *file = fopen(CAMBOT_NOULS_JSON, "rb");
     char *raw;
     size_t got;
     cJSON *root;
     int count = 0;
     cJSON *item = NULL;
     if (!file) {
-        file = fopen(WITNESS_ROOT "/watch.json", "rb");
+        file = fopen(CAMBOT_ROOT "/watch.json", "rb");
     }
     if (!file) {
         return 0;
@@ -735,11 +735,11 @@ static void maybe_alert(const question_t *question, double score, const char *is
     }
     previous = alert_previous(question->name);
     saved = *previous;
-    if (!witness_alert_edge(previous, score, question->alert_yes)) {
+    if (!cambot_alert_edge(previous, score, question->alert_yes)) {
         return;
     }
     side = question->alert_yes ? "yes" : "no";
-    snprintf(text, sizeof text, "Witness: %s is %s (%.2f) at %s", question->label, side, score, iso);
+    snprintf(text, sizeof text, "Gizmonic Cambot: %s is %s (%.2f) at %s", question->label, side, score, iso);
     payload = cJSON_CreateObject();
     if (!payload) {
         *previous = saved;
@@ -752,7 +752,7 @@ static void maybe_alert(const question_t *question, double score, const char *is
         *previous = saved;
         return;
     }
-    if (witness_llm_alert(question->alert_url, printed) == ESP_OK) {
+    if (cambot_llm_alert(question->alert_url, printed) == ESP_OK) {
         printf("alert=sent name=%s\n", question->name);
     } else {
         *previous = saved;
@@ -783,9 +783,9 @@ static int box_edges(cJSON *answer, double *top, double *bottom, double *left, d
 
 static bool ask_jev(const uint8_t *jpeg, size_t len, const question_t *questions, int count, cJSON *watch,
                     cJSON *boxes, const char *iso) {
-    witness_jev_asset assets[QUESTION_MAX * EXAMPLE_MAX];
+    cambot_jev_asset assets[QUESTION_MAX * EXAMPLE_MAX];
     char asset_keys[QUESTION_MAX * EXAMPLE_MAX][16];
-    witness_jev_question outgoing[QUESTION_MAX];
+    cambot_jev_question outgoing[QUESTION_MAX];
     char instructions[QUESTION_MAX][640];
     char *photo = NULL;
     char *body = NULL;
@@ -818,8 +818,8 @@ static bool ask_jev(const uint8_t *jpeg, size_t len, const question_t *questions
             size_t jpeg_len = 0;
             const char *side;
             int more;
-            snprintf(path, sizeof path, WITNESS_ROOT "/nouls/%s/%s.jpg", questions[i].name, questions[i].examples[e].id);
-            jpeg_bytes = read_capped(path, WITNESS_NOUL_JPEG_MAX, &jpeg_len);
+            snprintf(path, sizeof path, CAMBOT_ROOT "/nouls/%s/%s.jpg", questions[i].name, questions[i].examples[e].id);
+            jpeg_bytes = read_capped(path, CAMBOT_NOUL_JPEG_MAX, &jpeg_len);
             if (!jpeg_bytes) {
                 continue;
             }
@@ -852,8 +852,8 @@ static bool ask_jev(const uint8_t *jpeg, size_t len, const question_t *questions
         printf("jev=fail err=no_mem\n");
         goto done;
     }
-    wrote = witness_jev_request(body, (size_t)body_cap, WITNESS_JEV_MODEL, photo, assets, asset_count, outgoing, count);
-    if (wrote < 0 || witness_llm_jev_post(jev_key, body, response, 8192) != ESP_OK) {
+    wrote = cambot_jev_request(body, (size_t)body_cap, CAMBOT_JEV_MODEL, photo, assets, asset_count, outgoing, count);
+    if (wrote < 0 || cambot_llm_jev_post(jev_key, body, response, 8192) != ESP_OK) {
         goto done;
     }
     root = cJSON_Parse(response);
@@ -928,7 +928,7 @@ static bool append_line(const char *path, const char *line) {
 static cJSON *read_day_records(const char *day) {
     cJSON *rows = cJSON_CreateArray();
     char dirpath[160];
-    snprintf(dirpath, sizeof dirpath, WITNESS_ROOT "/index/%s", day);
+    snprintf(dirpath, sizeof dirpath, CAMBOT_ROOT "/index/%s", day);
     for (int hour = 0; hour < 24 && cJSON_GetArraySize(rows) < 256; hour++) {
         char path[192];
         snprintf(path, sizeof path, "%s/%02d.jsonl", dirpath, hour);
@@ -1031,9 +1031,9 @@ static void rewrite_events(const char *day) {
             cJSON_AddItemToArray(events, run);
         }
     }
-    mkdir(WITNESS_ROOT "/events", 0775);
+    mkdir(CAMBOT_ROOT "/events", 0775);
     char path[160];
-    snprintf(path, sizeof path, WITNESS_ROOT "/events/%s.jsonl", day);
+    snprintf(path, sizeof path, CAMBOT_ROOT "/events/%s.jsonl", day);
     FILE *file = fopen(path, "wb");
     if (file) {
         cJSON *event = NULL;
@@ -1081,7 +1081,7 @@ static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, c
         cJSON_AddArrayToObject(record, "objects");
         cJSON_AddArrayToObject(record, "actions");
         cJSON_AddStringToObject(record, "robot_state", "");
-        cJSON_AddStringToObject(record, "model", "typesafe/" WITNESS_JEV_MODEL);
+        cJSON_AddStringToObject(record, "model", "typesafe/" CAMBOT_JEV_MODEL);
     }
     cJSON_AddItemToObject(record, "watch", watch);
     if (boxes && cJSON_GetArraySize(boxes) > 0) {
@@ -1096,8 +1096,8 @@ static void write_record(const keyframe_t *item, cJSON *caption, cJSON *watch, c
         return;
     }
     char dir[160];
-    snprintf(dir, sizeof dir, WITNESS_ROOT "/index/%s", day);
-    mkdir(WITNESS_ROOT "/index", 0775);
+    snprintf(dir, sizeof dir, CAMBOT_ROOT "/index/%s", day);
+    mkdir(CAMBOT_ROOT "/index", 0775);
     mkdir(dir, 0775);
     char path[192];
     snprintf(path, sizeof path, "%s/%s.jsonl", dir, hour);
@@ -1166,7 +1166,7 @@ static void flush_batch(keyframe_t *batch, int count) {
                 if (!index_enabled) {
                     break;
                 }
-                if (witness_llm_openai(openai_key, NULL, "gpt-4.1-mini", batch[i].jpeg, batch[i].len, CAPTION_PROMPT,
+                if (cambot_llm_openai(openai_key, NULL, "gpt-4.1-mini", batch[i].jpeg, batch[i].len, CAPTION_PROMPT,
                                        response, sizeof response) == ESP_OK) {
                     caption = parse_caption(response);
                 }
@@ -1215,7 +1215,7 @@ static void indexer_task(void *arg) {
     }
 }
 
-void witness_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16_t motion_milli, uint32_t frame,
+void cambot_indexer_submit(const uint8_t *jpeg, size_t len, time_t when, uint16_t motion_milli, uint32_t frame,
                             const char *seg) {
     if (!either_index() || !keyframes || !jpeg || len == 0 || !seg) {
         return;
@@ -1249,7 +1249,7 @@ static void *json_malloc(size_t size) {
     return ptr ? ptr : malloc(size);
 }
 
-void witness_indexer_start(void) {
+void cambot_indexer_start(void) {
     /* cJSON trees are thousands of small nodes; in internal RAM they left too
      * little contiguous DMA memory for SD writes and Wi-Fi. */
     cJSON_Hooks hooks = {.malloc_fn = json_malloc, .free_fn = free};

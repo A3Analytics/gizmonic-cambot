@@ -21,9 +21,9 @@ only as the environment variable names in `secrets`.
 
 | Value | Where it lives |
 |---|---|
-| Wi-Fi password | `WITNESS_WIFI_PASSWORD` |
-| Camera access password | `WITNESS_CAMERA_PASSWORD` |
-| Model API key | `WITNESS_MODEL_KEY` |
+| Wi-Fi password | `CAMBOT_WIFI_PASSWORD` |
+| Camera access password | `CAMBOT_CAMERA_PASSWORD` |
+| Model API key | `CAMBOT_MODEL_KEY` |
 
 `ask_before_setup` is the list an agent still has to get from the user. Do not
 guess a time zone, a scene description, or a model endpoint.
@@ -44,7 +44,7 @@ The camera password is sent only from this computer to the camera, as
 `Authorization: Bearer`, and only when a browser asks for a frame.
 
 ```bash
-export WITNESS_CAMERA_PASSWORD    # hidden prompt or your own shell; do not echo it
+export CAMBOT_CAMERA_PASSWORD    # hidden prompt or your own shell; do not echo it
 /opt/homebrew/bin/python3.13 fixr/registrar/serve.py
 ```
 
@@ -68,11 +68,11 @@ TypeSafe about once every 1.7 s while it runs.
 Runtime state is written under `fixr/run/`, which is gitignored. If
 `fixr/run/secrets.env` exists, the registrar loads it at startup and does not
 override variables already set in the environment. Put
-`WITNESS_CAMERA_PASSWORD=...` in that file. Do not commit it, and do not paste
+`CAMBOT_CAMERA_PASSWORD=...` in that file. Do not commit it, and do not paste
 the value into chat.
 
 The programming environment in the repository plan is ESP-IDF 5.x in C.
 This machine has v5.5.6, which the plan does not pin. `firmware/` is the setup
 test. It joins Wi-Fi, POSTs `/api/register`, and serves the live frame. The
-Witness firmware itself is a later step. `witness` ships with milestone M2.
-Until then, do not invent `witness` commands.
+Cambot firmware itself is a later step. `cambot` ships with milestone M2.
+Until then, do not invent `cambot` commands.

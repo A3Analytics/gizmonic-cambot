@@ -2,8 +2,8 @@
 """Two-minute recording check against a camera that is already running.
 
 This does not flash the board. Host tests cover the same query on a fixture
-card. Set WITNESS_CAMERA_URL (for example http://192.168.1.20) and
-WITNESS_CAMERA_PASSWORD to run it. The password is not printed.
+card. Set CAMBOT_CAMERA_URL (for example http://192.168.1.20) and
+CAMBOT_CAMERA_PASSWORD to run it. The password is not printed.
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ import urllib.request
 
 
 def main() -> int:
-    base = os.environ.get("WITNESS_CAMERA_URL", "").rstrip("/")
-    token = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    base = os.environ.get("CAMBOT_CAMERA_URL", "").rstrip("/")
+    token = os.environ.get("CAMBOT_CAMERA_PASSWORD", "")
     if not base:
-        print("record_check=skipped reason=WITNESS_CAMERA_URL_unset")
+        print("record_check=skipped reason=CAMBOT_CAMERA_URL_unset")
         return 0
     if not token:
-        print("record_check=skipped reason=WITNESS_CAMERA_PASSWORD_unset")
+        print("record_check=skipped reason=CAMBOT_CAMERA_PASSWORD_unset")
         return 0
     request = urllib.request.Request(
         base + "/api/v1/recordings?from=-2m&to=-0s",

@@ -1,13 +1,13 @@
 ---
-title: "Witness camera: mechanical specification for CAD"
+title: "Gizmonic Cambot: mechanical specification for CAD"
 subtitle: "Case, board sled, W-Mount interface, screw clamp and magnet puck · for Astra"
-author: "Witness project · open hardware (CERN-OHL-P-2.0)"
+author: "Gizmonic Cambot project · open hardware (CERN-OHL-P-2.0)"
 date: "Spec rev A · October 2026"
 ---
 
 ## 1. Purpose and deliverables
 
-Design a 3D-printable enclosure and modular mounting system for the Witness
+Design a 3D-printable enclosure and modular mounting system for the Cambot
 camera, a monitoring camera built on the FORIOT ESP32-S3-CAM board. Every part
 must print on a hobby FDM printer without supports unless noted, and must be
 fully parametric so the community can change it.
@@ -27,7 +27,7 @@ Units are millimeters. Tolerances not stated are ±0.2 mm on the printed part.
 <div class="note">
 <strong>Dimensions marked TBV (to be verified)</strong> come from vendor listings
 or clone boards, not from calipers. Before freezing geometry, measure them on a
-physical board. The Witness team will supply calipered values and photos on
+physical board. The Gizmonic Cambot team will supply calipered values and photos on
 request. Every TBV value must be a top-level parameter.
 </div>
 
@@ -88,7 +88,7 @@ fields of view from 66° to 160° (section 5.2).
 | Overhangs | ≤ 45° without supports; bridges ≤ 15 mm |
 | Screws | M2 self-tapping into Ø1.7 pilot holes, or M2 heat-set inserts (Ø3.2 pocket) as an option (`use_inserts`) |
 | Edge treatment | 0.6 mm chamfer on outer edges; 1 mm fillets on hand-contact edges |
-| Text | Debossed 0.4 mm, ≥ 4 mm tall: "WITNESS", "TTL", "OTG", "SD" |
+| Text | Debossed 0.4 mm, ≥ 4 mm tall: "CAMBOT", "TTL", "OTG", "SD" |
 | Metal near antenna | No inserts, nuts or magnets within 15 mm of the antenna end |
 
 ## 5. Body

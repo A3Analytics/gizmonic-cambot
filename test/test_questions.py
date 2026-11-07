@@ -2,7 +2,7 @@
 
 import pytest
 
-from host.witness_models.questions import questions_from_description
+from host.cambot_models.questions import questions_from_description
 
 CANNED = """
 A red square sits on a white background.

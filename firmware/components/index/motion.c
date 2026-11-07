@@ -1,6 +1,6 @@
-#include "witness_motion.h"
+#include "cambot_motion.h"
 
-uint16_t witness_motion_milli(const uint8_t *previous, const uint8_t *current, size_t count) {
+uint16_t cambot_motion_milli(const uint8_t *previous, const uint8_t *current, size_t count) {
     if (!previous || !current || count == 0) {
         return 0;
     }

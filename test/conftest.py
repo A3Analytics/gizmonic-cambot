@@ -10,11 +10,11 @@ from pathlib import Path
 
 
 def pytest_sessionstart(session) -> None:
-    if os.environ.get("WITNESS_MODEL_KEY"):
+    if os.environ.get("CAMBOT_MODEL_KEY"):
         return
     path = Path(__file__).resolve().parents[1] / "openai_api_key.txt"
     if not path.is_file():
         return
     value = path.read_text(encoding="utf-8").strip()
     if value:
-        os.environ["WITNESS_MODEL_KEY"] = value
+        os.environ["CAMBOT_MODEL_KEY"] = value

@@ -1,0 +1,107 @@
+[
+  {
+    "file": "3mf/housing_v3.3mf",
+    "source": "cambot-v3-short/3mf/housing_v3.3mf",
+    "sha256": "2eb0b75272ad530efc0c5a80ef23ec76bc1d2365d845921de1ef894f2ecc76fd"
+  },
+  {
+    "file": "stl/housing_v3.stl",
+    "source": "cambot-v3-short/stl/housing_v3.stl",
+    "sha256": "5238f5446deb5634d9371cbf876358985fb5b1d11e92fd3e92bb028bbd5a50c5"
+  },
+  {
+    "file": "step/housing_v3.step",
+    "source": "cambot-v3-short/step/housing_v3.step",
+    "sha256": "46bd570766118de68345f69316f9e6e50cbecfc24a055cfe433f6bc879bf47fd"
+  },
+  {
+    "file": "3mf/retainer_v3_short.3mf",
+    "source": "cambot-v3-short/3mf/retainer_v3_short.3mf",
+    "sha256": "2bbc0902a9bd994502f97f2ae88c333330fd0034cb3e05b844283627bbd0a259"
+  },
+  {
+    "file": "stl/retainer_v3_short.stl",
+    "source": "cambot-v3-short/stl/retainer_v3_short.stl",
+    "sha256": "ef2bee03b95796b0adf602e3309b6f4d1b5e8c61c060358a47347c314b51a9b4"
+  },
+  {
+    "file": "step/retainer_v3_short.step",
+    "source": "cambot-v3-short/step/retainer_v3_short.step",
+    "sha256": "015437b94b2a0e1677ef32dd7b430b78f583c5f0950f56c8e992b834367852da"
+  },
+  {
+    "file": "3mf/rod_male_25.3mf",
+    "source": "cambot-arms/3mf/rod_male_25.3mf",
+    "sha256": "d983fe376160a7be5d7ecf1531cd953ceff511abf66d272d84e5501b9b52869c"
+  },
+  {
+    "file": "stl/rod_male_25.stl",
+    "source": "cambot-arms/stl/rod_male_25.stl",
+    "sha256": "7b2da1169c86cfc026efd154462968f44c4740f26ce658e7bfbd292be0e80b5f"
+  },
+  {
+    "file": "step/rod_male_25.step",
+    "source": "cambot-arms/step/rod_male_25.step",
+    "sha256": "7df03390a97ac0354a770f85f93fb0f5e60c7c45bfbeecbcf14b6d7076273d75"
+  },
+  {
+    "file": "3mf/rod_female_25_6-32.3mf",
+    "source": "cambot-arms/3mf/rod_female_25_6-32.3mf",
+    "sha256": "828a16cb523ba4073859fa3d1ac4dbca4f35d89953ecbe8b735aeeea9e9246cf"
+  },
+  {
+    "file": "stl/rod_female_25_6-32.stl",
+    "source": "cambot-arms/stl/rod_female_25_6-32.stl",
+    "sha256": "b8e94f451274067d1f754ee92a5af06ee3a6c98d7fcb7818f7c6b1ed2ed6c07d"
+  },
+  {
+    "file": "step/rod_female_25_6-32.step",
+    "source": "cambot-arms/step/rod_female_25_6-32.step",
+    "sha256": "3e01e79edef9f3ce94a7371faaa47f16a26c945bcff507266f4e019e7c834df7"
+  },
+  {
+    "file": "3mf/rod_male_50.3mf",
+    "source": "cambot-arms/3mf/rod_male_50.3mf",
+    "sha256": "1902d2b5ca2e19d85f8ccddd425685c565fbca3d65f70551804a801ed9a65b03"
+  },
+  {
+    "file": "stl/rod_male_50.stl",
+    "source": "cambot-arms/stl/rod_male_50.stl",
+    "sha256": "e18073f792ef51b9e69cbda31b6ad3881214941f8eac2e466aba0f47d2d659ec"
+  },
+  {
+    "file": "step/rod_male_50.step",
+    "source": "cambot-arms/step/rod_male_50.step",
+    "sha256": "94207674dec8899dc24c192dae702993c9baee379ede240766e6d091382643f8"
+  },
+  {
+    "file": "3mf/rod_female_50_6-32.3mf",
+    "source": "cambot-arms/3mf/rod_female_50_6-32.3mf",
+    "sha256": "4d3782c5f7cf6858c42cc98dd93dfb6fdfff609770f239392bd4a02ffa454384"
+  },
+  {
+    "file": "stl/rod_female_50_6-32.stl",
+    "source": "cambot-arms/stl/rod_female_50_6-32.stl",
+    "sha256": "6a557d85d2b9bfb6d3c5180ffd45e6006d59db16db71682c27bea8e91a3956fb"
+  },
+  {
+    "file": "step/rod_female_50_6-32.step",
+    "source": "cambot-arms/step/rod_female_50_6-32.step",
+    "sha256": "fc9aa4c8e5d6d2ef3f5d69188bc3af1f247182e146afe935d244f2b3e3b9fff0"
+  },
+  {
+    "file": "3mf/dual_magnet_foot.3mf",
+    "source": "cambot-dual-magnet/3mf/dual_magnet_foot.3mf",
+    "sha256": "18465fb1baade696f4164cb590ae2aa9120e8c5ed06fcf49418b27ab0eed60ec"
+  },
+  {
+    "file": "stl/dual_magnet_foot.stl",
+    "source": "cambot-dual-magnet/stl/dual_magnet_foot.stl",
+    "sha256": "a534444b26fe4cf48cd1a027f6d52811f358bc2e43143752d7d4b453fe0420bb"
+  },
+  {
+    "file": "step/dual_magnet_foot.step",
+    "source": "cambot-dual-magnet/step/dual_magnet_foot.step",
+    "sha256": "b6ca2d55c7a30f6fde0ae6ec8e11bbb7dd234a292d8055bd9b4cad7f94a216aa"
+  }
+]

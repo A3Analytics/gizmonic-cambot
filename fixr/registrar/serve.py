@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LAN registrar for a Witness camera.
+"""LAN registrar for a Gizmonic Cambot.
 
 The camera POSTs /api/register when it joins the network. This page lists
 each camera and refreshes its live frame. A query box on this computer reads
@@ -217,7 +217,7 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Witness registrar</title>
+<title>Cambot registrar</title>
 <style>
   body { font: 16px/1.4 ui-sans-serif, system-ui, sans-serif; margin: 1rem 1.25rem 2rem; color: #1c1917; background: #fafaf9; }
   h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
@@ -277,7 +277,7 @@ PAGE = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>Witness registrar</h1>
+<h1>Cambot registrar</h1>
 <p class="note" id="hint">Waiting for a camera to POST /api/register.</p>
 <div id="list"></div>
 <section class="card" id="ask">
@@ -1419,9 +1419,9 @@ class Registry:
 
 
 def fetch_authed(ip: str, path: str, limit: int) -> tuple[int, bytes, str]:
-    password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    password = os.environ.get("CAMBOT_CAMERA_PASSWORD", "")
     if not password:
-        return 503, b"WITNESS_CAMERA_PASSWORD is not set\n", "text/plain"
+        return 503, b"CAMBOT_CAMERA_PASSWORD is not set\n", "text/plain"
     req = urllib.request.Request(f"http://{ip}{path}")
     req.add_header("Authorization", "Bearer " + password)
     try:
@@ -1465,9 +1465,9 @@ def shrink_jpeg(data: bytes) -> bytes:
 
 
 def put_authed(ip: str, path: str, data: bytes, content_type: str, limit: int) -> tuple[int, bytes, str]:
-    password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    password = os.environ.get("CAMBOT_CAMERA_PASSWORD", "")
     if not password:
-        return 503, b"WITNESS_CAMERA_PASSWORD is not set\n", "text/plain"
+        return 503, b"CAMBOT_CAMERA_PASSWORD is not set\n", "text/plain"
     req = urllib.request.Request(f"http://{ip}{path}", data=data, method="PUT")
     req.add_header("Authorization", "Bearer " + password)
     req.add_header("Content-Type", content_type)
@@ -1484,9 +1484,9 @@ def put_authed(ip: str, path: str, data: bytes, content_type: str, limit: int) -
 
 
 def post_authed(ip: str, path: str, payload: dict) -> tuple[int, bytes, str]:
-    password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    password = os.environ.get("CAMBOT_CAMERA_PASSWORD", "")
     if not password:
-        return 503, b"WITNESS_CAMERA_PASSWORD is not set\n", "text/plain"
+        return 503, b"CAMBOT_CAMERA_PASSWORD is not set\n", "text/plain"
     req = urllib.request.Request(f"http://{ip}{path}", data=json.dumps(payload).encode(), method="POST")
     req.add_header("Authorization", "Bearer " + password)
     req.add_header("Content-Type", "application/json")
@@ -1507,7 +1507,7 @@ class QueryError(Exception):
 
 
 def model_key() -> str:
-    env = os.environ.get("WITNESS_MODEL_KEY", "").strip()
+    env = os.environ.get("CAMBOT_MODEL_KEY", "").strip()
     if env:
         return env
     path = REPO / "openai_api_key.txt"
@@ -1517,9 +1517,9 @@ def model_key() -> str:
 
 
 def mcp_call(ip: str, name: str, arguments: dict) -> str:
-    password = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    password = os.environ.get("CAMBOT_CAMERA_PASSWORD", "")
     if not password:
-        raise QueryError(503, "WITNESS_CAMERA_PASSWORD is not set")
+        raise QueryError(503, "CAMBOT_CAMERA_PASSWORD is not set")
     payload = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -1595,13 +1595,13 @@ def index_records(text: str) -> tuple[list[dict], bool]:
 def answer_question(question: str, records: list[dict], recordings: str, truncated: bool) -> str:
     key = model_key()
     if not key:
-        raise QueryError(503, "WITNESS_MODEL_KEY is not set")
+        raise QueryError(503, "CAMBOT_MODEL_KEY is not set")
     now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
     note = ""
     if truncated:
         note = f"Only the newest {INDEX_LIMIT} keyframes are included.\n"
     prompt = (
-        "You answer questions about a single Witness camera using only the keyframe index below.\n"
+        "You answer questions about a single Gizmonic Cambot using only the keyframe index below.\n"
         "Each record is one keyframe. The camera writes one on the first frame, then about every "
         "1.5 seconds.\n"
         "Record times are UTC. Answer in America/Los_Angeles local time, and say how long ago that was "
@@ -1654,10 +1654,10 @@ def answer_from_history(question: str, summary: dict, recordings: str) -> str:
     """Ask the model about the registrar's copy of the index, not the camera."""
     key = model_key()
     if not key:
-        raise QueryError(503, "WITNESS_MODEL_KEY is not set")
+        raise QueryError(503, "CAMBOT_MODEL_KEY is not set")
     now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
     prompt = (
-        "You answer questions about a single Witness camera using only the history below.\n"
+        "You answer questions about a single Gizmonic Cambot using only the history below.\n"
         "The history is the camera's keyframe index, copied onto this computer. It can cover "
         "several days. It is not a live card scan.\n"
         "Each keyframe is about 1.5 seconds apart. Times in the history are UTC. Answer in "
@@ -2350,7 +2350,7 @@ def check_profile() -> None:
         raise SystemExit(f"profile missing {missing}")
     if profile["python"]["use"]["meets_guide"] is not True:
         raise SystemExit("profile python.use must meet the 3.10 guide")
-    if profile["secrets"]["wifi_password_env"] != "WITNESS_WIFI_PASSWORD":
+    if profile["secrets"]["wifi_password_env"] != "CAMBOT_WIFI_PASSWORD":
         raise SystemExit("wifi password must be an env var name")
     blob = json.dumps(profile).lower()
     for banned in ("password", "token", "api_key"):
@@ -2368,7 +2368,7 @@ def run_check() -> int:
     try:
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/register",
-            data=json.dumps({"id": "witness-test", "fw": "0.0.0", "board": "foriot_s3cam"}).encode(),
+            data=json.dumps({"id": "cambot-test", "fw": "0.0.0", "board": "foriot_s3cam"}).encode(),
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=3) as resp:
@@ -2377,12 +2377,12 @@ def run_check() -> int:
             raise SystemExit(f"register failed: {registered}")
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/cameras", timeout=3) as resp:
             listing = json.loads(resp.read())
-        if listing["cameras"][0]["id"] != "witness-test":
+        if listing["cameras"][0]["id"] != "cambot-test":
             raise SystemExit("camera missing from list")
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=3) as resp:
             page = resp.read().decode()
         if (
-            "Witness registrar" not in page
+            "Cambot registrar" not in page
             or "/caption" not in page
             or "/index" not in page
             or "Ask a camera" not in page
@@ -2417,7 +2417,7 @@ def run_check() -> int:
         else:
             raise SystemExit("unknown camera delete should be 404")
         delete_ok = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/cameras/witness-test",
+            f"http://127.0.0.1:{port}/api/cameras/cambot-test",
             method="DELETE",
         )
         with urllib.request.urlopen(delete_ok, timeout=3) as resp:
@@ -2432,7 +2432,7 @@ def run_check() -> int:
         with urllib.request.urlopen(
             urllib.request.Request(
                 f"http://127.0.0.1:{port}/api/register",
-                data=json.dumps({"id": "witness-test", "fw": "0.0.0", "board": "foriot_s3cam"}).encode(),
+                data=json.dumps({"id": "cambot-test", "fw": "0.0.0", "board": "foriot_s3cam"}).encode(),
                 headers={"Content-Type": "application/json"},
             ),
             timeout=3,
@@ -2485,8 +2485,8 @@ def run_check() -> int:
                 raise SystemExit(f"unexpected missing-camera caption status {exc.code}")
         else:
             raise SystemExit("unknown camera caption should be 404")
-        frame_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/frame.jpg"
-        caption_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/caption"
+        frame_url = f"http://127.0.0.1:{port}/api/cameras/cambot-test/frame.jpg"
+        caption_url = f"http://127.0.0.1:{port}/api/cameras/cambot-test/caption"
         for url, label in ((frame_url, "frame"), (caption_url, "caption")):
             try:
                 urllib.request.urlopen(url, timeout=3)
@@ -2496,7 +2496,7 @@ def run_check() -> int:
             else:
                 raise SystemExit(f"{label} fetch should fail without a camera")
         query_url = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/cameras/witness-test/query",
+            f"http://127.0.0.1:{port}/api/cameras/cambot-test/query",
             data=json.dumps({"text": "was a hand in frame?"}).encode(),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -2519,7 +2519,7 @@ def run_check() -> int:
                 raise SystemExit(f"unexpected missing-camera indexing status {exc.code}")
         else:
             raise SystemExit("unknown camera indexing should be 404")
-        indexing_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/indexing"
+        indexing_url = f"http://127.0.0.1:{port}/api/cameras/cambot-test/indexing"
         try:
             urllib.request.urlopen(indexing_url, timeout=3)
         except urllib.error.HTTPError as exc:
@@ -2539,8 +2539,8 @@ def run_check() -> int:
                     raise SystemExit(f"unexpected missing-camera status {exc.code} for {missing}")
             else:
                 raise SystemExit(f"unknown camera should be 404 for {missing}")
-        jev_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/jev"
-        nouls_url = f"http://127.0.0.1:{port}/api/cameras/witness-test/nouls"
+        jev_url = f"http://127.0.0.1:{port}/api/cameras/cambot-test/jev"
+        nouls_url = f"http://127.0.0.1:{port}/api/cameras/cambot-test/nouls"
         for url, label in ((jev_url, "jev"), (nouls_url, "nouls")):
             try:
                 urllib.request.urlopen(url, timeout=3)
@@ -2565,7 +2565,7 @@ def main() -> int:
     registry = Registry(REGISTRY)
     host = "0.0.0.0"
     ip = lan_ip()
-    password_state = "set" if os.environ.get("WITNESS_CAMERA_PASSWORD") else "missing"
+    password_state = "set" if os.environ.get("CAMBOT_CAMERA_PASSWORD") else "missing"
     model_state = "set" if model_key() else "missing"
     print(f"registrar=http://{ip}:{PORT}/", flush=True)
     print(f"register=POST http://{ip}:{PORT}/api/register", flush=True)

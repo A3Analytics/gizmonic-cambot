@@ -1,4 +1,4 @@
-# Witness camera
+# Gizmonic Cambot
 
 Open specification for a cheap ESP32-S3 camera that records a rolling buffer to
 its microSD card and answers questions about what a robot or machine did, for
@@ -10,9 +10,9 @@ repository holds the documents that define them.
 
 | Document | Read it for |
 |---|---|
-| [White paper](docs/witness-whitepaper.pdf) | What it is and how a question becomes an answer |
-| [Mechanical spec](docs/witness-astra-mechanical-spec.pdf) | Case, clamp, and magnet mount, written for CAD |
-| [Firmware repository plan](docs/witness-firmware-repo-plan.pdf) | On-board software, API, agent, and repo layout |
+| [White paper](docs/cambot-whitepaper.pdf) | What it is and how a question becomes an answer |
+| [Mechanical spec](docs/cambot-astra-mechanical-spec.pdf) | Case, clamp, and magnet mount, written for CAD |
+| [Firmware repository plan](docs/cambot-firmware-repo-plan.pdf) | On-board software, API, agent, and repo layout |
 | [Setup guide](fixr/SETUP.md) | Installing a camera, written for a person or a coding agent |
 | [FIXR](fixr/README.md) | That guide, per-computer profiles, and the LAN registrar |
 

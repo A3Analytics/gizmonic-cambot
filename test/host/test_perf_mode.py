@@ -64,7 +64,7 @@ class FakeCamera(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("X-Witness-Preview", "cached")
+            self.send_header("X-Cambot-Preview", "cached")
             self.end_headers()
             self.wfile.write(body)
             return
@@ -104,8 +104,8 @@ def perf_stack(tmp_path: Path):
     registrar = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(registry, high_perf_state=high_perf))
     threading.Thread(target=registrar.serve_forever, daemon=True).start()
     host, port = registrar.server_address
-    os.environ["WITNESS_CAMERA_PASSWORD"] = PASSWORD
-    registry.upsert("witness-live", f"{camera_ip}:{camera_port}", "setup", "foriot_s3cam")
+    os.environ["CAMBOT_CAMERA_PASSWORD"] = PASSWORD
+    registry.upsert("cambot-live", f"{camera_ip}:{camera_port}", "setup", "foriot_s3cam")
     yield {
         "base": f"http://{host}:{port}",
         "camera": FakeCamera,
@@ -137,7 +137,7 @@ def test_cached_frame_proxy_is_fast(perf_stack):
     latencies = []
     for _ in range(8):
         started = time.perf_counter()
-        req = urllib.request.Request(f"{base}/api/cameras/witness-live/frame.jpg")
+        req = urllib.request.Request(f"{base}/api/cameras/cambot-live/frame.jpg")
         with urllib.request.urlopen(req, timeout=5) as resp:
             body = resp.read()
             assert resp.status == 200
@@ -149,14 +149,14 @@ def test_cached_frame_proxy_is_fast(perf_stack):
 
 def test_perf_round_trip_restores_defaults(perf_stack):
     base = perf_stack["base"]
-    status, body = _json(f"{base}/api/cameras/witness-live/perf", method="POST", payload={"enabled": True})
+    status, body = _json(f"{base}/api/cameras/cambot-live/perf", method="POST", payload={"enabled": True})
     assert status == 200
     assert body["enabled"] is True
     assert body["capture_ms"] == 200
     assert body["fflush_every"] == 5
     assert perf_stack["camera"].perf is True
 
-    status, body = _json(f"{base}/api/cameras/witness-live/perf", method="POST", payload={"enabled": False})
+    status, body = _json(f"{base}/api/cameras/cambot-live/perf", method="POST", payload={"enabled": False})
     assert status == 200
     assert body["enabled"] is False
     assert body["capture_ms"] == 200

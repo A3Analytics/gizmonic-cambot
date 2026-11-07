@@ -44,7 +44,7 @@ def load_env_file() -> None:
 
 
 def camera_url() -> str:
-    url = os.environ.get("WITNESS_CAMERA_URL", "").rstrip("/")
+    url = os.environ.get("CAMBOT_CAMERA_URL", "").rstrip("/")
     if url:
         return url
     registry = RUN / "cameras.json"
@@ -162,7 +162,7 @@ def main() -> int:
 
     load_env_file()
     base = camera_url()
-    token = os.environ.get("WITNESS_CAMERA_PASSWORD", "")
+    token = os.environ.get("CAMBOT_CAMERA_PASSWORD", "")
     if not base or not token:
         print("jev_watch=skipped reason=camera_url_or_password_unset")
         return 0

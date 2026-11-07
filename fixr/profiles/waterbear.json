@@ -37,7 +37,7 @@
     "cmake": "4.4.5",
     "ninja": "1.13.2",
     "esp_idf": "5.5.6",
-    "witness": null
+    "cambot": null
   },
   "network": {
     "interface": "en0",
@@ -47,9 +47,9 @@
     "registrar_port": 8765
   },
   "secrets": {
-    "wifi_password_env": "WITNESS_WIFI_PASSWORD",
-    "camera_password_env": "WITNESS_CAMERA_PASSWORD",
-    "model_api_key_env": "WITNESS_MODEL_KEY"
+    "wifi_password_env": "CAMBOT_WIFI_PASSWORD",
+    "camera_password_env": "CAMBOT_CAMERA_PASSWORD",
+    "model_api_key_env": "CAMBOT_MODEL_KEY"
   },
   "setup": {
     "time_zone": "America/Los_Angeles",
@@ -61,8 +61,8 @@
     }
   },
   "ask_before_setup": [
-    "Wi-Fi password, via WITNESS_WIFI_PASSWORD or fixr/run/secrets.env",
-    "Camera access password, via WITNESS_CAMERA_PASSWORD or fixr/run/secrets.env",
+    "Wi-Fi password, via CAMBOT_WIFI_PASSWORD or fixr/run/secrets.env",
+    "Camera access password, via CAMBOT_CAMERA_PASSWORD or fixr/run/secrets.env",
     "Confirm the Wi-Fi name Figaro is the 2.4 GHz network"
   ],
   "install_notes": [
@@ -74,7 +74,7 @@
     {
       "step": "s1-pipx",
       "result": "ok",
-      "detail": "pipx 1.7.1. It does not have witness-cli installed."
+      "detail": "pipx 1.7.1. It does not have cambot-cli installed."
     },
     {
       "step": "s1-ffmpeg",
@@ -89,12 +89,12 @@
     {
       "step": "s1-idf",
       "result": "ok",
-      "detail": "ESP-IDF v5.5.6 is at ~/esp/esp-idf. The plan says ESP-IDF 5.x and does not pin a release, so this is the current 5.x bugfix. install.sh selected Python 3.9.6 because that is python3 on PATH. cmake 4.4.5 and ninja 1.13.2 were missing and were installed with Homebrew. firmware/ built witness_bringup.bin for esp32s3, 16 MB flash, octal PSRAM."
+      "detail": "ESP-IDF v5.5.6 is at ~/esp/esp-idf. The plan says ESP-IDF 5.x and does not pin a release, so this is the current 5.x bugfix. install.sh selected Python 3.9.6 because that is python3 on PATH. cmake 4.4.5 and ninja 1.13.2 were missing and were installed with Homebrew. firmware/ built cambot_bringup.bin for esp32s3, 16 MB flash, octal PSRAM."
     },
     {
-      "step": "s1-witness",
+      "step": "s1-cambot",
       "result": "failed",
-      "detail": "The witness CLI is not installed. It ships with firmware milestone M2, which is not in this repository. Do not invent witness commands."
+      "detail": "The cambot CLI is not installed. It ships with firmware milestone M2, which is not in this repository. Do not invent cambot commands."
     },
     {
       "step": "s3-port",
@@ -104,7 +104,7 @@
     {
       "step": "s4-flash",
       "result": "ok",
-      "detail": "Flashed the setup test at 115200 on /dev/cu.usbserial-11230. Boot log: boot=HELLO witness fw=setup id=witness-0d98, flash_mb=16, psram_mb=8, camera=ok pid=0x3660."
+      "detail": "Flashed the setup test at 115200 on /dev/cu.usbserial-11230. Boot log: boot=HELLO cambot fw=setup id=cambot-0d98, flash_mb=16, psram_mb=8, camera=ok pid=0x3660."
     },
     {
       "step": "s5-wifi",
@@ -114,12 +114,12 @@
     {
       "step": "register",
       "result": "ok",
-      "detail": "POST /api/register returned register=ok id=witness-0d98. The registrar at 192.168.68.91:8765 listed that camera and fetched a 8947-byte JPEG from GET /api/v1/frame.jpg. The page refreshes the view every two seconds."
+      "detail": "POST /api/register returned register=ok id=cambot-0d98. The registrar at 192.168.68.91:8765 listed that camera and fetched a 8947-byte JPEG from GET /api/v1/frame.jpg. The page refreshes the view every two seconds."
     },
     {
       "step": "registrar",
       "result": "ok",
-      "detail": "fixr/registrar/serve.py --check registered a local client, listed it, and served the page. Frame fetch returned 503 because WITNESS_CAMERA_PASSWORD was not set. A camera on the LAN still cannot register until firmware sends POST /api/register."
+      "detail": "fixr/registrar/serve.py --check registered a local client, listed it, and served the page. Frame fetch returned 503 because CAMBOT_CAMERA_PASSWORD was not set. A camera on the LAN still cannot register until firmware sends POST /api/register."
     }
   ]
 }

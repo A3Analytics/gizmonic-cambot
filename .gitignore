@@ -8,6 +8,7 @@ __pycache__/
 **/secrets.h
 openai_api_key.txt
 jev_api_key.txt
+figaro_pw.txt
 fixr/run/
 firmware/build/
 firmware/sdkconfig

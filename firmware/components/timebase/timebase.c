@@ -1,4 +1,4 @@
-#include "witness_time.h"
+#include "cambot_time.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -14,7 +14,7 @@ static void on_sync(struct timeval *tv) {
     printf("time=synced\n");
 }
 
-void witness_time_start(const char *iana) {
+void cambot_time_start(const char *iana) {
     const char *zone = "PST8PDT,M3.2.0,M11.1.0";
     if (iana && strcmp(iana, "UTC") == 0) {
         zone = "UTC0";
@@ -31,6 +31,6 @@ void witness_time_start(const char *iana) {
     printf("time=start tz=%s\n", iana ? iana : "America/Los_Angeles");
 }
 
-bool witness_time_synced(void) {
+bool cambot_time_synced(void) {
     return synced;
 }

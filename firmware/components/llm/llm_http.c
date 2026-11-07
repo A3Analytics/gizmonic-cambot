@@ -1,5 +1,5 @@
-#include "witness_llm.h"
-#include "witness_llm_client.h"
+#include "cambot_llm.h"
+#include "cambot_llm_client.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +12,7 @@
 #include "freertos/semphr.h"
 #include "mbedtls/base64.h"
 
-static const char *TAG = "witness.llm";
+static const char *TAG = "cambot.llm";
 
 static esp_err_t post_json(const char *url, const char *header_name, const char *header_value,
                            const char *extra_name, const char *extra_value, const char *body, char *out,
@@ -91,7 +91,7 @@ static char *b64_alloc(const uint8_t *jpeg, size_t len, size_t *out_len) {
     return text;
 }
 
-esp_err_t witness_llm_anthropic(const char *api_key, const char *model, const uint8_t *jpeg, size_t jpeg_len,
+esp_err_t cambot_llm_anthropic(const char *api_key, const char *model, const uint8_t *jpeg, size_t jpeg_len,
                                 const char *prompt, char *out, size_t out_cap) {
     size_t b64_len = 0;
     char *b64 = b64_alloc(jpeg, jpeg_len, &b64_len);
@@ -104,15 +104,15 @@ esp_err_t witness_llm_anthropic(const char *api_key, const char *model, const ui
         free(b64);
         return ESP_ERR_NO_MEM;
     }
-    int wrote = witness_anthropic_body(body, cap, model, prompt, b64, 1024);
+    int wrote = cambot_anthropic_body(body, cap, model, prompt, b64, 1024);
     free(b64);
     if (wrote < 0) {
         free(body);
         return ESP_ERR_NO_MEM;
     }
     int status = 0;
-    esp_err_t err = post_json(WITNESS_ANTHROPIC_URL, "x-api-key", api_key, "anthropic-version",
-                              WITNESS_ANTHROPIC_VERSION, body, out, out_cap, &status);
+    esp_err_t err = post_json(CAMBOT_ANTHROPIC_URL, "x-api-key", api_key, "anthropic-version",
+                              CAMBOT_ANTHROPIC_VERSION, body, out, out_cap, &status);
     free(body);
     if (err != ESP_OK) {
         return err;
@@ -132,7 +132,7 @@ esp_err_t witness_llm_anthropic(const char *api_key, const char *model, const ui
     return ESP_OK;
 }
 
-esp_err_t witness_llm_jev(const char *api_key, const uint8_t *jpeg, size_t jpeg_len, const char *question,
+esp_err_t cambot_llm_jev(const char *api_key, const uint8_t *jpeg, size_t jpeg_len, const char *question,
                           const char *instructions, char *out, size_t out_cap) {
     size_t b64_len = 0;
     char *b64 = b64_alloc(jpeg, jpeg_len, &b64_len);
@@ -152,7 +152,7 @@ esp_err_t witness_llm_jev(const char *api_key, const uint8_t *jpeg, size_t jpeg_
         return ESP_ERR_NO_MEM;
     }
     snprintf(auth, strlen(api_key) + 8, "Bearer %s", api_key);
-    int wrote = witness_jev_body(body, cap, WITNESS_JEV_MODEL, question, instructions, b64);
+    int wrote = cambot_jev_body(body, cap, CAMBOT_JEV_MODEL, question, instructions, b64);
     free(b64);
     if (wrote < 0) {
         free(body);
@@ -160,7 +160,7 @@ esp_err_t witness_llm_jev(const char *api_key, const uint8_t *jpeg, size_t jpeg_
         return ESP_ERR_NO_MEM;
     }
     int status = 0;
-    esp_err_t err = post_json(WITNESS_JEV_URL, "Authorization", auth, WITNESS_JEV_IMAGES_HEADER, "true", body, out,
+    esp_err_t err = post_json(CAMBOT_JEV_URL, "Authorization", auth, CAMBOT_JEV_IMAGES_HEADER, "true", body, out,
                               out_cap, &status);
     memset(auth, 0, strlen(api_key) + 8);
     free(auth);
@@ -198,7 +198,7 @@ static esp_err_t jev_exchange(const char *auth, const char *body, char *out, siz
     *reused = jev_client != NULL;
     if (!jev_client) {
         esp_http_client_config_t cfg = {
-            .url = WITNESS_JEV_URL,
+            .url = CAMBOT_JEV_URL,
             .method = HTTP_METHOD_POST,
             .timeout_ms = 20000,
             .crt_bundle_attach = esp_crt_bundle_attach,
@@ -209,7 +209,7 @@ static esp_err_t jev_exchange(const char *auth, const char *body, char *out, siz
             return ESP_FAIL;
         }
         esp_http_client_set_header(jev_client, "Content-Type", "application/json");
-        esp_http_client_set_header(jev_client, WITNESS_JEV_IMAGES_HEADER, "true");
+        esp_http_client_set_header(jev_client, CAMBOT_JEV_IMAGES_HEADER, "true");
     }
     esp_http_client_set_header(jev_client, "Authorization", auth);
     int body_len = (int)strlen(body);
@@ -244,11 +244,11 @@ static esp_err_t jev_exchange(const char *auth, const char *body, char *out, siz
         jev_drop();
     }
     *status = status_code;
-    ESP_LOGI(TAG, "model_http status=%d url=%s reused=%d", status_code, WITNESS_JEV_URL, *reused ? 1 : 0);
+    ESP_LOGI(TAG, "model_http status=%d url=%s reused=%d", status_code, CAMBOT_JEV_URL, *reused ? 1 : 0);
     return err;
 }
 
-esp_err_t witness_llm_jev_post(const char *api_key, const char *body, char *out, size_t out_cap) {
+esp_err_t cambot_llm_jev_post(const char *api_key, const char *body, char *out, size_t out_cap) {
     char *auth;
     int status = 0;
     esp_err_t err;
@@ -295,7 +295,7 @@ esp_err_t witness_llm_jev_post(const char *api_key, const char *body, char *out,
     return ESP_OK;
 }
 
-esp_err_t witness_llm_alert(const char *url, const char *json_body) {
+esp_err_t cambot_llm_alert(const char *url, const char *json_body) {
     esp_http_client_config_t cfg;
     esp_http_client_handle_t client;
     int body_len;

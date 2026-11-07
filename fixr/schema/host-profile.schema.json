@@ -44,7 +44,7 @@
     "tools": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["witness"],
+      "required": ["cambot"],
       "properties": {
         "pipx": { "type": ["string", "null"] },
         "platformio": { "type": ["string", "null"] },
@@ -56,9 +56,9 @@
           "type": ["string", "null"],
           "description": "Installed ESP-IDF version. The plan says 5.x and does not pin a release."
         },
-        "witness": {
+        "cambot": {
           "type": ["string", "null"],
-          "description": "Version of the witness CLI, or null when milestone M2 is not installed."
+          "description": "Version of the cambot CLI, or null when milestone M2 is not installed."
         }
       }
     },
@@ -70,7 +70,7 @@
         "lan_ipv4": { "type": "string" },
         "wifi_ssid": {
           "type": "string",
-          "description": "Network name only. The password belongs in WITNESS_WIFI_PASSWORD."
+          "description": "Network name only. The password belongs in CAMBOT_WIFI_PASSWORD."
         },
         "wifi_band_note": { "type": "string" },
         "registrar_port": { "type": "integer", "minimum": 1, "maximum": 65535 }
@@ -81,9 +81,9 @@
       "additionalProperties": false,
       "required": ["wifi_password_env", "camera_password_env"],
       "properties": {
-        "wifi_password_env": { "const": "WITNESS_WIFI_PASSWORD" },
-        "camera_password_env": { "const": "WITNESS_CAMERA_PASSWORD" },
-        "model_api_key_env": { "const": "WITNESS_MODEL_KEY" }
+        "wifi_password_env": { "const": "CAMBOT_WIFI_PASSWORD" },
+        "camera_password_env": { "const": "CAMBOT_CAMERA_PASSWORD" },
+        "model_api_key_env": { "const": "CAMBOT_MODEL_KEY" }
       }
     },
     "setup": {

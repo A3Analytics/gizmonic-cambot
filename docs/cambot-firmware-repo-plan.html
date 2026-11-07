@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Gizmonic Cambot project · Apache-2.0" />
+  <title>Gizmonic Cambot: open-source software repository plan</title>
+  <style>
+
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+  <style type="text/css">:root {
+--ink: #1c2330;
+--muted: #5b6678;
+--rule: #d9dee7;
+--accent: #0f6c7a;
+--accent-soft: #e6f3f4;
+--warn-soft: #fff6e0;
+--warn: #9a6700;
+--code-bg: #f4f6f9;
+}
+@page {
+size: Letter;
+margin: 18mm 17mm 18mm 17mm;
+}
+html {
+font-size: 10.5pt;
+}
+body {
+font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+color: var(--ink);
+line-height: 1.5;
+max-width: 7.4in;
+margin: 2.5rem auto;
+padding: 0 1.25rem;
+}
+@media print {
+body {
+margin: 0 auto;
+padding: 0;
+}
+}
+header#title-block-header {
+border-bottom: 3px solid var(--accent);
+padding-bottom: 0.9rem;
+margin-bottom: 1.6rem;
+}
+h1.title {
+font-size: 2.05rem;
+line-height: 1.15;
+margin: 0 0 0.35rem 0;
+letter-spacing: -0.01em;
+}
+p.subtitle {
+font-size: 1.15rem;
+color: var(--muted);
+margin: 0 0 0.5rem 0;
+}
+p.author,
+p.date {
+margin: 0;
+color: var(--muted);
+font-size: 0.92rem;
+}
+h2 {
+font-size: 1.35rem;
+color: var(--accent);
+border-bottom: 1px solid var(--rule);
+padding-bottom: 0.2rem;
+margin-top: 1.9rem;
+break-after: avoid;
+}
+h3 {
+font-size: 1.08rem;
+margin-top: 1.35rem;
+break-after: avoid;
+}
+h4 {
+font-size: 0.98rem;
+margin-top: 1.1rem;
+break-after: avoid;
+}
+p,
+li {
+orphans: 3;
+widows: 3;
+}
+a {
+color: var(--accent);
+}
+code {
+font-family: "SF Mono", Menlo, Consolas, monospace;
+font-size: 0.88em;
+background: var(--code-bg);
+padding: 0.05em 0.3em;
+border-radius: 3px;
+}
+pre {
+background: var(--code-bg);
+border: 1px solid var(--rule);
+border-radius: 5px;
+padding: 0.65rem 0.8rem;
+overflow-x: auto;
+font-size: 0.84rem;
+line-height: 1.4;
+break-inside: avoid;
+}
+pre code {
+background: none;
+padding: 0;
+font-size: inherit;
+}
+table {
+border-collapse: collapse;
+width: 100%;
+margin: 0.8rem 0 1.1rem 0;
+font-size: 0.9rem;
+}
+tr {
+break-inside: avoid;
+}
+thead {
+display: table-header-group;
+}
+th,
+td {
+border-bottom: 1px solid var(--rule);
+padding: 0.32rem 0.5rem;
+text-align: left;
+vertical-align: top;
+}
+th {
+background: var(--accent-soft);
+font-weight: 600;
+}
+blockquote {
+margin: 1rem 0;
+padding: 0.6rem 0.9rem;
+border-left: 4px solid var(--accent);
+background: var(--accent-soft);
+color: var(--ink);
+}
+blockquote p {
+margin: 0.25rem 0;
+}
+.note {
+background: var(--warn-soft);
+border-left: 4px solid var(--warn);
+padding: 0.6rem 0.9rem;
+margin: 1rem 0;
+}
+figure {
+margin: 1.2rem 0;
+text-align: center;
+break-inside: avoid;
+}
+figure img {
+max-width: 100%;
+}
+figcaption {
+font-size: 0.86rem;
+color: var(--muted);
+margin-top: 0.4rem;
+}
+nav#TOC {
+border: 1px solid var(--rule);
+border-radius: 5px;
+padding: 0.5rem 1rem;
+margin-bottom: 1.5rem;
+font-size: 0.92rem;
+}
+nav#TOC ul {
+margin: 0.2rem 0;
+padding-left: 1.1rem;
+}
+nav#TOC > ul > li > ul {
+display: none;
+}
+.pagebreak {
+break-before: page;
+}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Gizmonic Cambot: open-source software repository
+plan</h1>
+<p class="subtitle">On-board firmware, agent, API and CLI for the
+ESP32-S3 camera</p>
+<p class="author">Gizmonic Cambot project · Apache-2.0</p>
+<p class="date">Plan rev A · October 2026</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#goals" id="toc-goals">1. Goals</a></li>
+<li><a href="#repository-layout" id="toc-repository-layout">2.
+Repository layout</a></li>
+<li><a href="#runtime-architecture" id="toc-runtime-architecture">3.
+Runtime architecture</a></li>
+<li><a href="#storage-format-on-the-sd-card" id="toc-storage-format-on-the-sd-card">4. Storage format on the SD
+card</a></li>
+<li><a href="#indexing-pipeline" id="toc-indexing-pipeline">5. Indexing
+pipeline</a></li>
+<li><a href="#model-adapters" id="toc-model-adapters">6. Model
+adapters</a></li>
+<li><a href="#agent-and-tools" id="toc-agent-and-tools">7. Agent and
+tools</a></li>
+<li><a href="#http-api-v1" id="toc-http-api-v1">8. HTTP API
+(v1)</a></li>
+<li><a href="#provisioning-and-configuration" id="toc-provisioning-and-configuration">9. Provisioning and
+configuration</a></li>
+<li><a href="#cambot-cli-python" id="toc-cambot-cli-python">10.
+<code>cambot</code> CLI (Python)</a></li>
+<li><a href="#testing-and-ci" id="toc-testing-and-ci">11. Testing and
+CI</a></li>
+<li><a href="#milestones" id="toc-milestones">12. Milestones</a></li>
+<li><a href="#contributor-rules-agents.md-summary" id="toc-contributor-rules-agents.md-summary">13. Contributor rules
+(<code>AGENTS.md</code> summary)</a></li>
+</ul>
+</nav>
+<h2 id="goals">1. Goals</h2>
+<ul>
+<li>Record continuously to microSD in a rolling buffer, and never lose
+recording because of indexing, queries or network trouble.</li>
+<li>Build a semantic index of activity with a cloud (or LAN) vision
+model, within a hard daily budget.</li>
+<li>Answer natural-language questions on the device, through a
+tool-calling agent, and expose the same tools through REST and MCP.</li>
+<li>Set up from a fresh board to a camera on the network in under ten
+minutes, driven by a person or by a coding agent.</li>
+<li>Support more than one camera board through board-support
+packages.</li>
+</ul>
+<p><strong>Non-goals for v1:</strong> audio, H.264, cloud video storage,
+face recognition, exposure to the public internet, enterprise Wi-Fi.</p>
+<h2 id="repository-layout">2. Repository layout</h2>
+<p>One monorepo, <code>gizmonic-cambot</code>, so firmware, CLI, docs
+and CAD release together.</p>
+<pre class="text"><code>gizmonic-cambot/
+├── README.md              what it is, photos, quick start
+├── AGENTS.md              rules and entry points for coding agents
+├── fixr/                  setup guide, per-computer profiles, registrar
+│   ├── SETUP.md           agent-readable setup guide (canonical)
+│   └── profiles/          one JSON spec and one note per computer
+├── LICENSE                Apache-2.0 (software); hardware/ and docs/ carry their own
+├── firmware/              ESP-IDF 5.x project
+│   ├── main/              app_main: task startup, watchdogs
+│   ├── components/
+│   │   ├── board/         BSPs: foriot_s3cam (default), freenove_s3, ...
+│   │   ├── capture/       esp32-camera setup, frame pacing, sensor tuning
+│   │   ├── recorder/      segment writer, frame index, ring-buffer eviction
+│   │   ├── activity/      1/8-scale JPEG decode, motion score
+│   │   ├── indexer/       keyframe policy, caption queue, JSONL index, events
+│   │   ├── llm/           provider adapters, budget, retries
+│   │   ├── agent/         tool registry, tool-calling loop
+│   │   ├── api/           REST handlers, MJPEG and AVI streaming, auth
+│   │   ├── mcp/           MCP server (Streamable HTTP, JSON-RPC 2.0)
+│   │   ├── provisioning/  Improv serial, SoftAP portal, NVS config
+│   │   ├── timebase/      SNTP, time zone, unsynced-segment repair
+│   │   ├── marks/         robot marks over HTTP and trigger input
+│   │   └── ota/           HTTPS OTA with rollback
+│   ├── webui/             small static UI (Preact), packed into LittleFS
+│   ├── partitions.csv
+│   └── sdkconfig.defaults[.board]
+├── cli/                   Python package `cambot-cli` (command `cambot`)
+├── hardware/              CAD source, STEP, STL and 3MF from Astra; PARTS.md
+├── docs/                  white paper, API (OpenAPI 3.1), index format, MCP tools
+├── flasher/               ESP Web Tools page and manifest (GitHub Pages)
+├── test/
+│   ├── host/              recorder, index and agent logic built for Linux
+│   ├── hil/               hardware-in-the-loop smoke test
+│   └── eval/              labeled robot sessions for search-quality scoring
+└── .github/workflows/     build per board, host tests, release, Pages</code></pre>
+<p><strong>Why ESP-IDF rather than Arduino.</strong> The Lloyd prototype
+used Arduino, which was fine for one endpoint. Cambot needs explicit
+task priorities and core pinning, the IDF HTTP server with several
+concurrent sockets, the SDMMC and FATFS tuning knobs, HTTPS OTA with
+rollback, and NVS encryption. The prototype’s working camera settings
+(pin map, <code>CAMERA_GRAB_LATEST</code>, OV3660 white-balance warm-up)
+carry over directly. PlatformIO stays as an optional build entry point
+for contributors who already use it.</p>
+<h2 id="runtime-architecture">3. Runtime architecture</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Task</th>
+<th>Core</th>
+<th>Priority</th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>capture</code></td>
+<td>1</td>
+<td>High</td>
+<td>Gets frames at the configured rate and pushes them to a PSRAM ring
+of frame pointers</td>
+</tr>
+<tr>
+<td><code>recorder</code></td>
+<td>1</td>
+<td>High</td>
+<td>Writes frames to the current segment in 64 KB chunks, appends the
+frame index, rotates every 60 s, evicts the oldest segments</td>
+</tr>
+<tr>
+<td><code>activity</code></td>
+<td>0</td>
+<td>Medium</td>
+<td>Decodes every Nth frame at 1/8 scale to grayscale, scores motion
+against a running background</td>
+</tr>
+<tr>
+<td><code>indexer</code></td>
+<td>0</td>
+<td>Low</td>
+<td>Picks keyframes, calls the model, writes index records and
+events</td>
+</tr>
+<tr>
+<td><code>httpd</code></td>
+<td>0</td>
+<td>Medium</td>
+<td>REST, MCP, live MJPEG, clip streaming</td>
+</tr>
+<tr>
+<td><code>agent</code></td>
+<td>0</td>
+<td>Low</td>
+<td>One <code>/ask</code> at a time; queues others</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rule:</strong> the recorder never waits on anything below it.
+If the SD card stalls, capture drops frames and counts them. If the
+indexer falls behind, keyframes are dropped by priority (watch-list
+candidates last).</p>
+<p><strong>Memory budget (8 MB PSRAM):</strong> camera buffers ~0.4 MB,
+frame ring ~1.5 MB, SD write buffers 0.25 MB, model request and response
+buffers ~0.5 MB, agent context 0.25 MB, plus mbedTLS allocations moved
+to PSRAM.</p>
+<p><strong>Flash (16 MB):</strong> two 4 MB OTA app slots, 2 MB LittleFS
+(web UI), NVS (64 KB, encrypted when enabled), core dump (64 KB).</p>
+<h2 id="storage-format-on-the-sd-card">4. Storage format on the SD
+card</h2>
+<p>Documented in <code>docs/storage-format.md</code> and versioned, so
+other tools can read a card directly.</p>
+<pre class="text"><code>/cambot/
+  card.json                         card id, format version, camera id
+  rec/2026-10-29/19/
+    2026-10-29T19-04-00Z.mjpg       concatenated JPEG frames, 60 s
+    2026-10-29T19-04-00Z.idx        binary: u64 t_ms_utc, u32 offset, u32 len, u16 motion
+  index/2026-10-29/19.jsonl         one keyframe record per line
+  events/2026-10-29.jsonl           merged events with start and end
+  marks/2026-10-29.jsonl            robot marks
+  vec/2026-10-29/19.vec             optional int8 caption embeddings (phase 2)</code></pre>
+<p><strong>Index record:</strong></p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;t&quot;</span><span class="fu">:</span><span class="st">&quot;2026-10-29T19:07:41.200Z&quot;</span><span class="fu">,</span><span class="dt">&quot;seg&quot;</span><span class="fu">:</span><span class="st">&quot;2026-10-29T19-07-00Z&quot;</span><span class="fu">,</span><span class="dt">&quot;frame&quot;</span><span class="fu">:</span><span class="dv">206</span><span class="fu">,</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;motion&quot;</span><span class="fu">:</span><span class="fl">0.41</span><span class="fu">,</span><span class="dt">&quot;caption&quot;</span><span class="fu">:</span><span class="st">&quot;Pipette head lowers onto tip rack column 3&quot;</span><span class="fu">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;objects&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="st">&quot;pipette head&quot;</span><span class="ot">,</span><span class="st">&quot;tip rack&quot;</span><span class="ot">]</span><span class="fu">,</span><span class="dt">&quot;actions&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="st">&quot;tip pickup&quot;</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;robot_state&quot;</span><span class="fu">:</span><span class="st">&quot;moving&quot;</span><span class="fu">,</span><span class="dt">&quot;watch&quot;</span><span class="fu">:{</span><span class="dt">&quot;tip pickup&quot;</span><span class="fu">:</span><span class="fl">0.92</span><span class="fu">,</span><span class="dt">&quot;person in frame&quot;</span><span class="fu">:</span><span class="fl">0.02</span><span class="fu">},</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;model&quot;</span><span class="fu">:</span><span class="st">&quot;&lt;provider&gt;/&lt;model&gt;&quot;</span><span class="fu">,</span><span class="dt">&quot;verified&quot;</span><span class="fu">:</span><span class="kw">false</span><span class="fu">}</span></span></code></pre></div>
+<p><strong>Eviction:</strong> when free space drops below
+<code>storage.reserve_pct</code> (default 10%), delete the oldest hour
+directory under <code>rec/</code>. Delete its <code>index/</code> and
+<code>vec/</code> files only once they are older than
+<code>storage.index_keep_days</code> (default 30). Index text is tiny,
+so a camera can still answer “what happened last week” from captions
+after that week’s video is gone.</p>
+<p><strong>Card:</strong> FAT32, 8–128 GB, high-endurance cards
+recommended. Mount in 1-bit SDMMC mode on CLK 39, CMD 38, D0 40. Call
+<code>setPins</code> before <code>begin</code> to avoid the PSRAM pin
+overlap.</p>
+<h2 id="indexing-pipeline">5. Indexing pipeline</h2>
+<ol type="1">
+<li><strong>Activity.</strong> A motion score from 0 to 1 per sampled
+frame.</li>
+<li><strong>Keyframe policy.</strong> One idle keyframe every
+<code>index.idle_s</code> (60 s). While motion stays above
+<code>index.motion_threshold</code>, one keyframe every
+<code>index.active_s</code> (3 s). Always take a keyframe at a robot
+mark.</li>
+<li><strong>Batching.</strong> Up to four keyframes per request, each
+labeled with its timestamp, to cut per-request overhead.</li>
+<li><strong>Prompt.</strong> A system prompt plus the user’s scene
+profile and watch list. The response must follow a JSON schema; invalid
+JSON is retried once and then dropped.</li>
+<li><strong>Events.</strong> Consecutive records sharing an action, or a
+watch-list hit above <code>watch.threshold</code>, are merged into
+events with start and end times.</li>
+<li><strong>Budget.</strong> <code>budget.frames_per_day</code> and
+<code>budget.tokens_per_day</code> are hard caps. When a cap is reached,
+indexing pauses and <code>/status</code> reports it. Recording
+continues.</li>
+</ol>
+<h2 id="model-adapters">6. Model adapters</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Adapter</th>
+<th>Covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>openai_compatible</code> (default)</td>
+<td>Chat Completions with tools and base64 images. Works with OpenAI,
+OpenRouter, Gemini’s OpenAI-compatible endpoint, vLLM, Ollama and LM
+Studio on the LAN.</td>
+</tr>
+<tr>
+<td><code>anthropic</code></td>
+<td>Messages API with tools and images</td>
+</tr>
+</tbody>
+</table>
+<p>Configuration: <code>model.base_url</code>, <code>model.name</code>,
+<code>model.api_key</code> (write-only), <code>model.vision</code>
+(bool), <code>model.max_tokens</code>. The repo keeps a <strong>tested
+models</strong> table in <code>docs/models.md</code> rather than
+hard-coding model names. TLS uses the IDF certificate bundle;
+<code>model.ca_pem</code> overrides it for private servers.</p>
+<h2 id="agent-and-tools">7. Agent and tools</h2>
+<p>The on-board agent loop: send the question with the tool list, run
+the tool calls the model requests, return results, and repeat. It stops
+after <code>agent.max_steps</code> (8) or when
+<code>agent.max_frames</code> (48) images have been sent. The final
+answer must cite moments as
+<code>{start, end, confidence, thumb_url, clip_url}</code>.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Images?</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_status</code></td>
+<td>No</td>
+<td>Time, sync state, storage, budget, recording state</td>
+</tr>
+<tr>
+<td><code>list_recordings(from, to)</code></td>
+<td>No</td>
+<td>Which minutes exist</td>
+</tr>
+<tr>
+<td><code>search_index(from, to, query, k)</code></td>
+<td>No</td>
+<td>Keyword, watch-list, mark and optional vector search over records
+and events</td>
+</tr>
+<tr>
+<td><code>get_marks(from, to, label?)</code></td>
+<td>No</td>
+<td>Robot marks</td>
+</tr>
+<tr>
+<td><code>inspect_window(t, before_s, after_s, n)</code></td>
+<td>Yes</td>
+<td>Sends <code>n</code> frames around <code>t</code> to the model</td>
+</tr>
+<tr>
+<td><code>scan(from, to, every_s)</code></td>
+<td>Yes</td>
+<td>Bounded sampling when the index has no hits; reports cost first</td>
+</tr>
+<tr>
+<td><code>make_clip(from, to)</code></td>
+<td>No</td>
+<td>Returns clip URLs (MJPEG stream and AVI download)</td>
+</tr>
+<tr>
+<td><code>get_live_frame</code></td>
+<td>Yes</td>
+<td>Current view</td>
+</tr>
+<tr>
+<td><code>set_watchlist(items)</code> /
+<code>set_profile(text)</code></td>
+<td>No</td>
+<td>Configuration, behind an admin scope</td>
+</tr>
+</tbody>
+</table>
+<p>The MCP server exposes these same tools, except that
+<code>inspect_window</code> and <code>scan</code> return image content
+to the calling agent instead of calling the on-board model. An external
+agent such as Cursor can then use its own model and spend nothing on the
+camera’s budget.</p>
+<h2 id="http-api-v1">8. HTTP API (v1)</h2>
+<p>All endpoints except <code>/api/v1/ping</code> require
+<code>Authorization: Bearer &lt;token&gt;</code>. The full OpenAPI 3.1
+document lives in <code>docs/api.yaml</code>.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Method and path</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/v1/ping</code></td>
+<td><code>{&quot;ok&quot;:true,&quot;id&quot;:&quot;cambot-ab12&quot;,&quot;fw&quot;:&quot;0.3.0&quot;}</code> (no auth;
+used by discovery)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/status</code></td>
+<td>Wi-Fi, time sync, SD, recording, budget, version</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/frame.jpg</code></td>
+<td>Current frame</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/stream</code></td>
+<td>Live MJPEG (multipart)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/recordings?from&amp;to</code></td>
+<td>Minute list with frame counts</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/frames?from&amp;to&amp;every_s</code></td>
+<td>JSON list of frame URLs</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/frame/{t}.jpg</code></td>
+<td>The recorded frame nearest to <code>t</code></td>
+</tr>
+<tr>
+<td><code>GET /api/v1/clip.mjpg?from&amp;to&amp;speed</code></td>
+<td>Replays a recorded window as MJPEG (plays in an
+<code>&lt;img&gt;</code>)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/clip.avi?from&amp;to</code></td>
+<td>MJPEG AVI, muxed on the fly from the frame index</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/index?from&amp;to&amp;q</code></td>
+<td>Matching index records</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/events?from&amp;to&amp;since_id</code></td>
+<td>Events (poll for alerts)</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/marks</code></td>
+<td><code>{&quot;label&quot;:&quot;step 12: pick tip&quot;,&quot;t?&quot;:...}</code></td>
+</tr>
+<tr>
+<td><code>POST /api/v1/ask</code></td>
+<td><code>{&quot;question&quot;:&quot;...&quot;}</code> → answer with cited moments</td>
+</tr>
+<tr>
+<td><code>GET</code>/<code>PATCH /api/v1/config</code></td>
+<td>Settings; secrets are write-only</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/ota</code></td>
+<td>Firmware URL or upload (admin)</td>
+</tr>
+<tr>
+<td><code>POST /mcp</code></td>
+<td>MCP Streamable HTTP endpoint</td>
+</tr>
+</tbody>
+</table>
+<p>Times are accepted as RFC 3339, as local wall time
+(<code>12:00</code>, interpreted in <code>time.tz</code> for today), or
+as relative times (<code>-30m</code>).</p>
+<h2 id="provisioning-and-configuration">9. Provisioning and
+configuration</h2>
+<ul>
+<li><strong>Serial (default, agent-friendly).</strong> The firmware
+speaks the open <strong>Improv Wi-Fi serial</strong> protocol on the TTL
+UART at 115200, plus a line-based JSON console
+(<code>{&quot;cmd&quot;:&quot;wifi.set&quot;,...}</code>) for everything else.
+<code>cambot provision</code> wraps both.</li>
+<li><strong>Browser flasher.</strong> ESP Web Tools on GitHub Pages
+flashes the board and runs Improv in Chrome or Edge, with no
+installs.</li>
+<li><strong>SoftAP fallback.</strong> With no stored network, or after
+holding BOOT for 5 s, the camera opens <code>Cambot-Setup-AB12</code>
+with a portal at <code>192.168.4.1</code>.</li>
+<li><strong>Identity.</strong> The hostname
+<code>cambot-&lt;last 4 hex of MAC&gt;</code> is advertised over mDNS as
+<code>_http._tcp</code> and <code>_cambot._tcp</code>, with TXT
+<code>id</code>, <code>fw</code> and <code>board</code>.</li>
+<li><strong>Token.</strong> Generated at first provisioning and returned
+once over serial to the CLI, which stores it in the OS keychain. It can
+be rotated with <code>cambot token rotate</code>.</li>
+</ul>
+<p>Log lines use the <code>key=value</code> style from the prototype
+(<code>wifi=ip=...</code>, <code>sd=ok size_gb=29.7</code>,
+<code>time=synced</code>) so people and agents can grep them.</p>
+<h2 id="cambot-cli-python">10. <code>cambot</code> CLI (Python)</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cambot doctor</code></td>
+<td>Checks Python, esptool, ports, drivers and ffmpeg, then prints
+fixes</td>
+</tr>
+<tr>
+<td><code>cambot ports</code></td>
+<td>Lists serial ports and labels them TTL (CH340, VID 1a86) or OTG (VID
+303a)</td>
+</tr>
+<tr>
+<td><code>cambot flash [--port] [--board]</code></td>
+<td>Downloads the release, then runs esptool at 115200 on TTL</td>
+</tr>
+<tr>
+<td><code>cambot provision --ssid</code></td>
+<td>Improv Wi-Fi. The password comes from
+<code>CAMBOT_WIFI_PASSWORD</code> or a hidden prompt. Saves the
+token.</td>
+</tr>
+<tr>
+<td><code>cambot discover</code></td>
+<td>Finds cameras over mDNS, then checks each with
+<code>/ping</code></td>
+</tr>
+<tr>
+<td><code>cambot status/ask/pull/export</code></td>
+<td>API wrappers; <code>export</code> produces MP4 with ffmpeg</td>
+</tr>
+<tr>
+<td><code>cambot config set/get</code></td>
+<td>Config. <code>-</code> reads a secret from stdin.</td>
+</tr>
+<tr>
+<td><code>cambot mcp-config</code></td>
+<td>Prints a ready <code>.cursor/mcp.json</code> entry</td>
+</tr>
+<tr>
+<td><code>cambot logs</code></td>
+<td>Tails the TTL serial log</td>
+</tr>
+</tbody>
+</table>
+<h2 id="testing-and-ci">11. Testing and CI</h2>
+<ul>
+<li><strong>Host tests (CI):</strong> ring-buffer eviction, index merge,
+query parsing, AVI muxing and agent loop logic against a mocked model.
+These are built with the IDF <code>linux</code> target or plain
+CMake.</li>
+<li><strong>Firmware builds (CI):</strong> one job per board BSP.
+Release artifacts are a merged factory binary, an OTA binary, the web
+flasher manifest and checksums.</li>
+<li><strong>Hardware-in-the-loop (HIL, manual or self-hosted
+runner):</strong> <code>test/hil/smoke.py</code> flashes, provisions,
+waits for <code>time=synced</code>, records two minutes, then checks the
+frame index, clip export and <code>/ask</code> on a mocked model.</li>
+<li><strong>Search evaluation:</strong> <code>test/eval/</code> holds
+recorded robot sessions with human-labeled events (tip pickup, drop,
+pour). Each release reports recall and timing error for the standard
+questions.</li>
+</ul>
+<h2 id="milestones">12. Milestones</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Milestone</th>
+<th>Scope</th>
+<th>Exit criterion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M0</td>
+<td>IDF skeleton, FORIOT BSP, camera, SD mount</td>
+<td>Frames on SD with a valid index</td>
+</tr>
+<tr>
+<td>M1</td>
+<td>Recorder, eviction, REST, live view, clips</td>
+<td>24 h soak with no dropped segments and eviction working</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>Improv, SoftAP, CLI, web flasher, SETUP.md</td>
+<td>A fresh board reaches the network by following SETUP.md, with an
+agent driving</td>
+</tr>
+<tr>
+<td>M3</td>
+<td>Activity, indexer, watch list, marks, search</td>
+<td>Eval recall ≥ 0.8 on tip-pickup sessions at default budget</td>
+</tr>
+<tr>
+<td>M4</td>
+<td>Agent <code>/ask</code>, MCP server</td>
+<td>The headline question answered correctly with clips from Cursor via
+MCP</td>
+</tr>
+<tr>
+<td>M5</td>
+<td>OTA with rollback, encrypted builds, second BSP</td>
+<td>OTA tested on both boards</td>
+</tr>
+<tr>
+<td>Later</td>
+<td>Embeddings, multi-camera hub</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="contributor-rules-agents.md-summary">13. Contributor rules
+(<code>AGENTS.md</code> summary)</h2>
+<ul>
+<li>Never commit secrets. <code>firmware/main/secrets.h</code> and
+<code>.env</code> are gitignored; examples ship as
+<code>*.example</code>.</li>
+<li>Keep the storage format and API versioned. Breaking changes bump
+<code>v1</code> to <code>v2</code>.</li>
+<li>Every new board adds a BSP and a board-kit CAD folder together.</li>
+<li>Recording comes before everything else. A pull request that can
+block the recorder task is rejected.</li>
+</ul>
+</body>
+</html>
