@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Gizmonic Cambot project · Apache-2.0" />
-  <title>Gizmonic Cambot: open-source software repository plan</title>
+  <title>Gizmonic Cambot: software architecture</title>
   <style>
 
 code{white-space: pre-wrap;}
@@ -22,71 +22,6 @@ margin: 0 0.8em 0.2em -1.6em;
 vertical-align: middle;
 }
 .display.math{display: block; text-align: center; margin: 0.5rem auto;}
-
-html { -webkit-text-size-adjust: 100%; }
-pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
-pre > code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode > span { color: inherit; text-decoration: inherit; }
-div.sourceCode { margin: 1em 0; }
-pre.sourceCode { margin: 0; }
-@media screen {
-div.sourceCode { overflow: auto; }
-}
-@media print {
-pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
-}
-pre.numberSource code
-{ counter-reset: source-line 0; }
-pre.numberSource code > span
-{ position: relative; left: -4em; counter-increment: source-line; }
-pre.numberSource code > span > a:first-child::before
-{ content: counter(source-line);
-position: relative; left: -1em; text-align: right; vertical-align: baseline;
-border: none; display: inline-block;
--webkit-touch-callout: none; -webkit-user-select: none;
--khtml-user-select: none; -moz-user-select: none;
--ms-user-select: none; user-select: none;
-padding: 0 4px; width: 4em;
-color: #aaaaaa;
-}
-pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
-div.sourceCode
-{ }
-@media screen {
-pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
-}
-code span.al { color: #ff0000; font-weight: bold; } 
-code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
-code span.at { color: #7d9029; } 
-code span.bn { color: #40a070; } 
-code span.bu { color: #008000; } 
-code span.cf { color: #007020; font-weight: bold; } 
-code span.ch { color: #4070a0; } 
-code span.cn { color: #880000; } 
-code span.co { color: #60a0b0; font-style: italic; } 
-code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
-code span.do { color: #ba2121; font-style: italic; } 
-code span.dt { color: #902000; } 
-code span.dv { color: #40a070; } 
-code span.er { color: #ff0000; font-weight: bold; } 
-code span.ex { } 
-code span.fl { color: #40a070; } 
-code span.fu { color: #06287e; } 
-code span.im { color: #008000; font-weight: bold; } 
-code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
-code span.kw { color: #007020; font-weight: bold; } 
-code span.op { color: #666666; } 
-code span.ot { color: #007020; } 
-code span.pp { color: #bc7a00; } 
-code span.sc { color: #4070a0; } 
-code span.ss { color: #bb6688; } 
-code span.st { color: #4070a0; } 
-code span.va { color: #19177c; } 
-code span.vs { color: #4070a0; } 
-code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
 </style>
   <style type="text/css">:root {
 --ink: #1c2330;
@@ -262,36 +197,34 @@ break-before: page;
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Gizmonic Cambot: open-source software repository
-plan</h1>
-<p class="subtitle">On-board firmware, agent, API and CLI for the
-ESP32-S3 camera</p>
+<h1 class="title">Gizmonic Cambot: software architecture</h1>
+<p class="subtitle">Firmware, host libraries, registrar, API and
+remaining work</p>
 <p class="author">Gizmonic Cambot project · Apache-2.0</p>
-<p class="date">Plan rev A · October 2026</p>
+<p class="date">Plan rev B · November 2026</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#goals" id="toc-goals">1. Goals</a></li>
-<li><a href="#repository-layout" id="toc-repository-layout">2.
-Repository layout</a></li>
+<li><a href="#repository-layout-as-built" id="toc-repository-layout-as-built">2. Repository layout (as
+built)</a></li>
 <li><a href="#runtime-architecture" id="toc-runtime-architecture">3.
 Runtime architecture</a></li>
 <li><a href="#storage-format-on-the-sd-card" id="toc-storage-format-on-the-sd-card">4. Storage format on the SD
 card</a></li>
-<li><a href="#indexing-pipeline" id="toc-indexing-pipeline">5. Indexing
-pipeline</a></li>
+<li><a href="#indexing-pipeline-on-device" id="toc-indexing-pipeline-on-device">5. Indexing pipeline (on
+device)</a></li>
 <li><a href="#model-adapters" id="toc-model-adapters">6. Model
 adapters</a></li>
-<li><a href="#agent-and-tools" id="toc-agent-and-tools">7. Agent and
-tools</a></li>
-<li><a href="#http-api-v1" id="toc-http-api-v1">8. HTTP API
-(v1)</a></li>
-<li><a href="#provisioning-and-configuration" id="toc-provisioning-and-configuration">9. Provisioning and
-configuration</a></li>
-<li><a href="#cambot-cli-python" id="toc-cambot-cli-python">10.
-<code>cambot</code> CLI (Python)</a></li>
-<li><a href="#testing-and-ci" id="toc-testing-and-ci">11. Testing and
-CI</a></li>
+<li><a href="#mcp-tools-on-camera" id="toc-mcp-tools-on-camera">7. MCP
+tools (on camera)</a></li>
+<li><a href="#http-api-v1-as-implemented" id="toc-http-api-v1-as-implemented">8. HTTP API (v1, as
+implemented)</a></li>
+<li><a href="#provisioning-and-configuration-today" id="toc-provisioning-and-configuration-today">9. Provisioning and
+configuration (today)</a></li>
+<li><a href="#registrar-lan-host" id="toc-registrar-lan-host">10.
+Registrar (LAN host)</a></li>
+<li><a href="#testing" id="toc-testing">11. Testing</a></li>
 <li><a href="#milestones" id="toc-milestones">12. Milestones</a></li>
 <li><a href="#contributor-rules-agents.md-summary" id="toc-contributor-rules-agents.md-summary">13. Contributor rules
 (<code>AGENTS.md</code> summary)</a></li>
@@ -301,294 +234,251 @@ CI</a></li>
 <ul>
 <li>Record continuously to microSD in a rolling buffer, and never lose
 recording because of indexing, queries or network trouble.</li>
-<li>Build a semantic index of activity with a cloud (or LAN) vision
-model, within a hard daily budget.</li>
-<li>Answer natural-language questions on the device, through a
-tool-calling agent, and expose the same tools through REST and MCP.</li>
-<li>Set up from a fresh board to a camera on the network in under ten
-minutes, driven by a person or by a coding agent.</li>
-<li>Support more than one camera board through board-support
-packages.</li>
+<li>Build a semantic index of activity on the device with cloud (or LAN)
+vision models, within a hard daily budget.</li>
+<li>Answer natural-language questions from a LAN host that keeps an
+index history, and expose search/inspect tools on the camera through
+REST and MCP.</li>
+<li>Set up from a fresh board to a camera on the network by following
+<code>fixr/SETUP.md</code>, driven by a person or by a coding
+agent.</li>
+<li>Support more than one camera board through board-support packages
+(today: FORIOT pin map from the Lloyd reference).</li>
 </ul>
 <p><strong>Non-goals for v1:</strong> audio, H.264, cloud video storage,
 face recognition, exposure to the public internet, enterprise Wi-Fi.</p>
-<h2 id="repository-layout">2. Repository layout</h2>
-<p>One monorepo, <code>gizmonic-cambot</code>, so firmware, CLI, docs
-and CAD release together.</p>
+<h2 id="repository-layout-as-built">2. Repository layout (as built)</h2>
+<p>One monorepo, <code>gizmonic-cambot</code>. Firmware, host tests,
+registrar, docs and CAD live together. Names below match the tree today;
+aspirational folders from the October plan that are not present are
+listed in section 12.</p>
 <pre class="text"><code>gizmonic-cambot/
-├── README.md              what it is, photos, quick start
-├── AGENTS.md              rules and entry points for coding agents
-├── fixr/                  setup guide, per-computer profiles, registrar
+├── README.md
+├── AGENTS.md
+├── pyproject.toml         host test package `cambot-host`
+├── assets/                README artwork
+├── fixr/
 │   ├── SETUP.md           agent-readable setup guide (canonical)
-│   └── profiles/          one JSON spec and one note per computer
-├── LICENSE                Apache-2.0 (software); hardware/ and docs/ carry their own
-├── firmware/              ESP-IDF 5.x project
-│   ├── main/              app_main: task startup, watchdogs
-│   ├── components/
-│   │   ├── board/         BSPs: foriot_s3cam (default), freenove_s3, ...
-│   │   ├── capture/       esp32-camera setup, frame pacing, sensor tuning
-│   │   ├── recorder/      segment writer, frame index, ring-buffer eviction
-│   │   ├── activity/      1/8-scale JPEG decode, motion score
-│   │   ├── indexer/       keyframe policy, caption queue, JSONL index, events
-│   │   ├── llm/           provider adapters, budget, retries
-│   │   ├── agent/         tool registry, tool-calling loop
-│   │   ├── api/           REST handlers, MJPEG and AVI streaming, auth
-│   │   ├── mcp/           MCP server (Streamable HTTP, JSON-RPC 2.0)
-│   │   ├── provisioning/  Improv serial, SoftAP portal, NVS config
-│   │   ├── timebase/      SNTP, time zone, unsynced-segment repair
-│   │   ├── marks/         robot marks over HTTP and trigger input
-│   │   └── ota/           HTTPS OTA with rollback
-│   ├── webui/             small static UI (Preact), packed into LittleFS
-│   ├── partitions.csv
-│   └── sdkconfig.defaults[.board]
-├── cli/                   Python package `cambot-cli` (command `cambot`)
-├── hardware/              CAD source, STEP, STL and 3MF from Astra; PARTS.md
-├── docs/                  white paper, API (OpenAPI 3.1), index format, MCP tools
-├── flasher/               ESP Web Tools page and manifest (GitHub Pages)
+│   ├── README.md
+│   ├── profiles/          per-computer JSON + notes (e.g. waterbear)
+│   ├── schema/            host-profile and camera-registration schemas
+│   └── registrar/         LAN web UI, ask, index.sqlite sync
+├── firmware/              ESP-IDF 5.x project (`cambot_bringup`)
+│   ├── main/              bring-up: Wi-Fi, HTTP, register, secrets.h
+│   └── components/
+│       ├── recorder/      capture loop, segments, HTTP, MCP, indexer task
+│       ├── index/         motion, keyframe, grayscale helpers
+│       ├── llm/           OpenAI, Anthropic, JEV body builders + HTTP
+│       ├── store/         frame index (idx) helpers
+│       └── timebase/      SNTP / sync flags
+├── host/
+│   ├── cambot_store/      card format, time queries, HTTP client helpers
+│   ├── cambot_index/      host-side indexer contract (ported on-device)
+│   ├── cambot_models/     OpenAI, Anthropic, JEV adapters
+│   └── cambot_mcp/        MCP tool definitions shared with tests
+├── hardware/
+│   └── cambot-minimum-petg-kit/   PETG case + arms + magnet foot
+├── docs/                  white paper, this plan, mechanical spec, build.sh
 ├── test/
-│   ├── host/              recorder, index and agent logic built for Linux
-│   ├── hil/               hardware-in-the-loop smoke test
-│   └── eval/              labeled robot sessions for search-quality scoring
-└── .github/workflows/     build per board, host tests, release, Pages</code></pre>
+│   ├── host/              Python + C unit tests
+│   └── hil/               hardware-in-the-loop helpers
+└── reference/from-lloyd-barbot/   board bring-up this firmware grew from</code></pre>
 <p><strong>Why ESP-IDF rather than Arduino.</strong> The Lloyd prototype
-used Arduino, which was fine for one endpoint. Cambot needs explicit
-task priorities and core pinning, the IDF HTTP server with several
-concurrent sockets, the SDMMC and FATFS tuning knobs, HTTPS OTA with
-rollback, and NVS encryption. The prototype’s working camera settings
-(pin map, <code>CAMERA_GRAB_LATEST</code>, OV3660 white-balance warm-up)
-carry over directly. PlatformIO stays as an optional build entry point
-for contributors who already use it.</p>
+used Arduino, which was fine for one endpoint. Cambot needs FreeRTOS
+task priorities, the IDF HTTP server with several concurrent sockets,
+SDMMC/FATFS tuning and room for OTA later. The prototype’s working
+camera settings (pin map, <code>CAMERA_GRAB_LATEST</code>, OV3660
+warm-up) carry over. PlatformIO is optional and unused in the current
+path.</p>
 <h2 id="runtime-architecture">3. Runtime architecture</h2>
 <table>
 <colgroup>
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
 </colgroup>
 <thead>
 <tr>
-<th>Task</th>
+<th>Task / role</th>
 <th>Core</th>
-<th>Priority</th>
 <th>Job</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>capture</code></td>
-<td>1</td>
-<td>High</td>
-<td>Gets frames at the configured rate and pushes them to a PSRAM ring
-of frame pointers</td>
-</tr>
-<tr>
 <td><code>recorder</code></td>
-<td>1</td>
-<td>High</td>
-<td>Writes frames to the current segment in 64 KB chunks, appends the
-frame index, rotates every 60 s, evicts the oldest segments</td>
-</tr>
-<tr>
-<td><code>activity</code></td>
-<td>0</td>
-<td>Medium</td>
-<td>Decodes every Nth frame at 1/8 scale to grayscale, scores motion
-against a running background</td>
+<td>Prefer 1</td>
+<td>Grab VGA JPEG, copy to PSRAM, append segment + idx, eviction</td>
 </tr>
 <tr>
 <td><code>indexer</code></td>
-<td>0</td>
-<td>Low</td>
-<td>Picks keyframes, calls the model, writes index records and
-events</td>
+<td>Prefer 0</td>
+<td>Motion score, keyframe policy, GPT/JEV calls, JSONL
+index/events</td>
 </tr>
 <tr>
 <td><code>httpd</code></td>
-<td>0</td>
-<td>Medium</td>
-<td>REST, MCP, live MJPEG, clip streaming</td>
+<td>0 (with Wi-Fi)</td>
+<td>REST, MCP, frame and clip serving</td>
 </tr>
 <tr>
-<td><code>agent</code></td>
-<td>0</td>
-<td>Low</td>
-<td>One <code>/ask</code> at a time; queues others</td>
+<td>Registrar (host)</td>
+<td>—</td>
+<td>Live UI, noul editor, ask, SQLite index history, perf/dev
+switches</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Rule:</strong> the recorder never waits on anything below it.
-If the SD card stalls, capture drops frames and counts them. If the
-indexer falls behind, keyframes are dropped by priority (watch-list
-candidates last).</p>
-<p><strong>Memory budget (8 MB PSRAM):</strong> camera buffers ~0.4 MB,
-frame ring ~1.5 MB, SD write buffers 0.25 MB, model request and response
-buffers ~0.5 MB, agent context 0.25 MB, plus mbedTLS allocations moved
-to PSRAM.</p>
-<p><strong>Flash (16 MB):</strong> two 4 MB OTA app slots, 2 MB LittleFS
-(web UI), NVS (64 KB, encrypted when enabled), core dump (64 KB).</p>
+<p><strong>Rule:</strong> the recorder never waits on the model. If the
+SD card stalls, capture drops frames and counts them. If the indexer
+falls behind, keyframes are dropped. HTTPS to OpenAI or TypeSafe must
+not hold the camera mutex.</p>
+<p><strong>Defaults today:</strong> <code>FRAMESIZE_VGA</code>,
+<code>capture_ms = 200</code> (~5 fps). High performance mode keeps that
+pace, flushes the card less often and tells the registrar to poll the
+live frame every 0.5 s. Flag file:
+<code>/sdcard/cambot/high_perf</code>.</p>
+<p><strong>Memory:</strong> 8 MB PSRAM holds camera buffers, JPEG copies
+for indexing and HTTP bodies. <strong>Flash:</strong> single bring-up
+app image for now; dual OTA slots remain planned.</p>
 <h2 id="storage-format-on-the-sd-card">4. Storage format on the SD
 card</h2>
-<p>Documented in <code>docs/storage-format.md</code> and versioned, so
-other tools can read a card directly.</p>
-<pre class="text"><code>/cambot/
-  card.json                         card id, format version, camera id
-  rec/2026-10-29/19/
-    2026-10-29T19-04-00Z.mjpg       concatenated JPEG frames, 60 s
-    2026-10-29T19-04-00Z.idx        binary: u64 t_ms_utc, u32 offset, u32 len, u16 motion
-  index/2026-10-29/19.jsonl         one keyframe record per line
-  events/2026-10-29.jsonl           merged events with start and end
-  marks/2026-10-29.jsonl            robot marks
-  vec/2026-10-29/19.vec             optional int8 caption embeddings (phase 2)</code></pre>
-<p><strong>Index record:</strong></p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;t&quot;</span><span class="fu">:</span><span class="st">&quot;2026-10-29T19:07:41.200Z&quot;</span><span class="fu">,</span><span class="dt">&quot;seg&quot;</span><span class="fu">:</span><span class="st">&quot;2026-10-29T19-07-00Z&quot;</span><span class="fu">,</span><span class="dt">&quot;frame&quot;</span><span class="fu">:</span><span class="dv">206</span><span class="fu">,</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;motion&quot;</span><span class="fu">:</span><span class="fl">0.41</span><span class="fu">,</span><span class="dt">&quot;caption&quot;</span><span class="fu">:</span><span class="st">&quot;Pipette head lowers onto tip rack column 3&quot;</span><span class="fu">,</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;objects&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="st">&quot;pipette head&quot;</span><span class="ot">,</span><span class="st">&quot;tip rack&quot;</span><span class="ot">]</span><span class="fu">,</span><span class="dt">&quot;actions&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="st">&quot;tip pickup&quot;</span><span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;robot_state&quot;</span><span class="fu">:</span><span class="st">&quot;moving&quot;</span><span class="fu">,</span><span class="dt">&quot;watch&quot;</span><span class="fu">:{</span><span class="dt">&quot;tip pickup&quot;</span><span class="fu">:</span><span class="fl">0.92</span><span class="fu">,</span><span class="dt">&quot;person in frame&quot;</span><span class="fu">:</span><span class="fl">0.02</span><span class="fu">},</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;model&quot;</span><span class="fu">:</span><span class="st">&quot;&lt;provider&gt;/&lt;model&gt;&quot;</span><span class="fu">,</span><span class="dt">&quot;verified&quot;</span><span class="fu">:</span><span class="kw">false</span><span class="fu">}</span></span></code></pre></div>
-<p><strong>Eviction:</strong> when free space drops below
-<code>storage.reserve_pct</code> (default 10%), delete the oldest hour
-directory under <code>rec/</code>. Delete its <code>index/</code> and
-<code>vec/</code> files only once they are older than
-<code>storage.index_keep_days</code> (default 30). Index text is tiny,
-so a camera can still answer “what happened last week” from captions
-after that week’s video is gone.</p>
-<p><strong>Card:</strong> FAT32, 8–128 GB, high-endurance cards
-recommended. Mount in 1-bit SDMMC mode on CLK 39, CMD 38, D0 40. Call
-<code>setPins</code> before <code>begin</code> to avoid the PSRAM pin
-overlap.</p>
-<h2 id="indexing-pipeline">5. Indexing pipeline</h2>
+<p>Root: <code>/sdcard/cambot</code> (<code>CAMBOT_ROOT</code>). Host
+libraries and on-device code share the same layout ideas; the camera is
+authoritative for what is on the card.</p>
+<pre class="text"><code>/sdcard/cambot/
+  rec/YYYY-MM-DD/HH/
+    YYYY-MM-DDTHH-MM-SSZ.mjpg     concatenated JPEG frames, ~60 s
+    YYYY-MM-DDTHH-MM-SSZ.idx      binary frame index (incl. motion milli)
+  index/YYYY-MM-DD/HH.jsonl       one keyframe record per line
+  events/YYYY-MM-DD.jsonl         merged events
+  nouls.json                      JEV questions (+ legacy watch.json read)
+  nouls/&lt;name&gt;/…                  example JPEGs (≤ 80 KB each)
+  high_perf                       present / content selects perf mode</code></pre>
+<p><strong>Index record (representative):</strong> caption, objects,
+actions, robot state, motion, segment id, optional JEV
+<code>watch</code> map, optional boxes and alert metadata. Exact fields
+follow the host indexer contract in
+<code>host/cambot_index/pipeline.py</code> and the on-device writer in
+<code>firmware/components/recorder/indexer.c</code>.</p>
+<p><strong>Eviction:</strong> when free space is low, delete the oldest
+hour under <code>rec/</code>. Recording continues if indexing is paused
+by budget or by the registrar’s Dev mode.</p>
+<p><strong>Card:</strong> FAT32, high-endurance recommended. Mount in
+1-bit SDMMC on CLK 39, CMD 38, D0 40 (FORIOT map from the Lloyd pins
+header).</p>
+<h2 id="indexing-pipeline-on-device">5. Indexing pipeline (on
+device)</h2>
 <ol type="1">
-<li><strong>Activity.</strong> A motion score from 0 to 1 per sampled
-frame.</li>
-<li><strong>Keyframe policy.</strong> One idle keyframe every
-<code>index.idle_s</code> (60 s). While motion stays above
-<code>index.motion_threshold</code>, one keyframe every
-<code>index.active_s</code> (3 s). Always take a keyframe at a robot
-mark.</li>
-<li><strong>Batching.</strong> Up to four keyframes per request, each
-labeled with its timestamp, to cut per-request overhead.</li>
-<li><strong>Prompt.</strong> A system prompt plus the user’s scene
-profile and watch list. The response must follow a JSON schema; invalid
-JSON is retried once and then dropped.</li>
-<li><strong>Events.</strong> Consecutive records sharing an action, or a
-watch-list hit above <code>watch.threshold</code>, are merged into
-events with start and end times.</li>
-<li><strong>Budget.</strong> <code>budget.frames_per_day</code> and
-<code>budget.tokens_per_day</code> are hard caps. When a cap is reached,
-indexing pauses and <code>/status</code> reports it. Recording
-continues.</li>
+<li><strong>Motion.</strong> Grayscale, shrink, mean absolute change →
+0..1 stored as thousandths in the frame index.</li>
+<li><strong>Keyframe.</strong> First frame; then every ~3 s while motion
+stays above threshold; else every ~60 s.</li>
+<li><strong>GPT</strong> (optional). Caption keyframe with
+<code>gpt-4.1-mini</code> into structured JSON.</li>
+<li><strong>JEV</strong> (optional). One System One request per keyframe
+with live frame, noul list, examples, optional box question. Camera
+calls TypeSafe; the registrar does not.</li>
+<li><strong>Persist.</strong> Append JSONL under <code>index/</code>;
+merge events; keep a RAM recent window for MCP <code>search_index</code>
+/ ask sync.</li>
+<li><strong>Budget.</strong> Daily frame budget pauses the indexer
+only.</li>
 </ol>
+<p>Nouls are yes/no questions with up to four example images, optional
+box geometry when score ≥ 0.5, optional colors for registrar overlay,
+and optional HTTPS webhooks that fire on edge into yes or no. Managed
+via <code>GET</code>/<code>PUT /api/v1/nouls</code> and example routes
+under <code>/api/v1/nouls/...</code>.</p>
 <h2 id="model-adapters">6. Model adapters</h2>
 <table>
 <colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
 </colgroup>
 <thead>
 <tr>
 <th>Adapter</th>
-<th>Covers</th>
+<th>Where</th>
+<th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>openai_compatible</code> (default)</td>
-<td>Chat Completions with tools and base64 images. Works with OpenAI,
-OpenRouter, Gemini’s OpenAI-compatible endpoint, vLLM, Ollama and LM
-Studio on the LAN.</td>
+<td>OpenAI-compatible</td>
+<td>Firmware <code>llm</code> + <code>host/cambot_models</code></td>
+<td>Captions / ask</td>
 </tr>
 <tr>
-<td><code>anthropic</code></td>
-<td>Messages API with tools and images</td>
+<td>Anthropic</td>
+<td>Firmware + host</td>
+<td>Messages API path exists</td>
+</tr>
+<tr>
+<td>JEV / TypeSafe</td>
+<td>Firmware + host</td>
+<td>Noul scoring on camera</td>
 </tr>
 </tbody>
 </table>
-<p>Configuration: <code>model.base_url</code>, <code>model.name</code>,
-<code>model.api_key</code> (write-only), <code>model.vision</code>
-(bool), <code>model.max_tokens</code>. The repo keeps a <strong>tested
-models</strong> table in <code>docs/models.md</code> rather than
-hard-coding model names. TLS uses the IDF certificate bundle;
-<code>model.ca_pem</code> overrides it for private servers.</p>
-<h2 id="agent-and-tools">7. Agent and tools</h2>
-<p>The on-board agent loop: send the question with the tool list, run
-the tool calls the model requests, return results, and repeat. It stops
-after <code>agent.max_steps</code> (8) or when
-<code>agent.max_frames</code> (48) images have been sent. The final
-answer must cite moments as
-<code>{start, end, confidence, thumb_url, clip_url}</code>.</p>
+<p>Bring-up keys are compile-time: <code>CAMBOT_MODEL_KEY</code>,
+<code>CAMBOT_JEV_KEY</code> in <code>secrets.h</code> (gitignored; see
+<code>secrets.h.example</code>). Registrar ask uses
+<code>CAMBOT_MODEL_KEY</code> from the environment or
+<code>fixr/run/secrets.env</code>.</p>
+<h2 id="mcp-tools-on-camera">7. MCP tools (on camera)</h2>
+<p><code>POST /mcp</code> speaks Streamable HTTP / JSON-RPC. Tools
+implemented on device:</p>
 <table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
 <thead>
 <tr>
 <th>Tool</th>
-<th>Images?</th>
 <th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>get_status</code></td>
-<td>No</td>
-<td>Time, sync state, storage, budget, recording state</td>
+<td>Camera / storage snapshot</td>
 </tr>
 <tr>
-<td><code>list_recordings(from, to)</code></td>
-<td>No</td>
-<td>Which minutes exist</td>
+<td><code>list_recordings</code></td>
+<td>Minutes that exist in a range</td>
 </tr>
 <tr>
-<td><code>search_index(from, to, query, k)</code></td>
-<td>No</td>
-<td>Keyword, watch-list, mark and optional vector search over records
-and events</td>
+<td><code>search_index</code></td>
+<td>Search the <strong>RAM recent</strong> index window</td>
 </tr>
 <tr>
-<td><code>get_marks(from, to, label?)</code></td>
-<td>No</td>
-<td>Robot marks</td>
+<td><code>read_index_page</code></td>
+<td>Page deeper history from the card</td>
 </tr>
 <tr>
-<td><code>inspect_window(t, before_s, after_s, n)</code></td>
-<td>Yes</td>
-<td>Sends <code>n</code> frames around <code>t</code> to the model</td>
+<td><code>inspect_window</code></td>
+<td>Return frame image content around a time</td>
 </tr>
 <tr>
-<td><code>scan(from, to, every_s)</code></td>
-<td>Yes</td>
-<td>Bounded sampling when the index has no hits; reports cost first</td>
-</tr>
-<tr>
-<td><code>make_clip(from, to)</code></td>
-<td>No</td>
-<td>Returns clip URLs (MJPEG stream and AVI download)</td>
+<td><code>make_clip</code></td>
+<td>Clip URL (<code>clip.mjpg</code>)</td>
 </tr>
 <tr>
 <td><code>get_live_frame</code></td>
-<td>Yes</td>
-<td>Current view</td>
-</tr>
-<tr>
-<td><code>set_watchlist(items)</code> /
-<code>set_profile(text)</code></td>
-<td>No</td>
-<td>Configuration, behind an admin scope</td>
+<td>Current JPEG</td>
 </tr>
 </tbody>
 </table>
-<p>The MCP server exposes these same tools, except that
-<code>inspect_window</code> and <code>scan</code> return image content
-to the calling agent instead of calling the on-board model. An external
-agent such as Cursor can then use its own model and spend nothing on the
-camera’s budget.</p>
-<h2 id="http-api-v1">8. HTTP API (v1)</h2>
-<p>All endpoints except <code>/api/v1/ping</code> require
-<code>Authorization: Bearer &lt;token&gt;</code>. The full OpenAPI 3.1
-document lives in <code>docs/api.yaml</code>.</p>
+<p>Host package <code>host/cambot_mcp</code> mirrors the tool list for
+tests. Full on-board agent loop and <code>POST /api/v1/ask</code> are
+still planned; today <strong>ask</strong> runs in
+<code>fixr/registrar/serve.py</code> against SQLite history synced from
+the camera.</p>
+<h2 id="http-api-v1-as-implemented">8. HTTP API (v1, as
+implemented)</h2>
+<p>Auth:
+<code>Authorization: Bearer &lt;CAMBOT_CAMERA_PASSWORD&gt;</code> on
+protected routes. <code>GET /api/v1/ping</code> and registration remain
+the discovery/setup surface.</p>
 <table>
 <colgroup>
 <col style="width: 50%" />
@@ -603,173 +493,114 @@ document lives in <code>docs/api.yaml</code>.</p>
 <tbody>
 <tr>
 <td><code>GET /api/v1/ping</code></td>
-<td><code>{&quot;ok&quot;:true,&quot;id&quot;:&quot;cambot-ab12&quot;,&quot;fw&quot;:&quot;0.3.0&quot;}</code> (no auth;
-used by discovery)</td>
-</tr>
-<tr>
-<td><code>GET /api/v1/status</code></td>
-<td>Wi-Fi, time sync, SD, recording, budget, version</td>
+<td>Liveness / id</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/frame.jpg</code></td>
-<td>Current frame</td>
+<td>Live JPEG</td>
 </tr>
 <tr>
-<td><code>GET /api/v1/stream</code></td>
-<td>Live MJPEG (multipart)</td>
+<td><code>GET /api/v1/status</code></td>
+<td>Wi-Fi, time, SD, recording, perf, indexing flags</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/recordings?from&amp;to</code></td>
-<td>Minute list with frame counts</td>
-</tr>
-<tr>
-<td><code>GET /api/v1/frames?from&amp;to&amp;every_s</code></td>
-<td>JSON list of frame URLs</td>
+<td>Segment list</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/frame/{t}.jpg</code></td>
-<td>The recorded frame nearest to <code>t</code></td>
+<td>Recorded frame nearest to <code>t</code></td>
 </tr>
 <tr>
-<td><code>GET /api/v1/clip.mjpg?from&amp;to&amp;speed</code></td>
-<td>Replays a recorded window as MJPEG (plays in an
-<code>&lt;img&gt;</code>)</td>
+<td><code>GET /api/v1/clip.mjpg?from&amp;to</code></td>
+<td>Replay window as MJPEG</td>
 </tr>
 <tr>
-<td><code>GET /api/v1/clip.avi?from&amp;to</code></td>
-<td>MJPEG AVI, muxed on the fly from the frame index</td>
+<td><code>GET /api/v1/index/latest</code></td>
+<td>Newest index record (registrar caption card)</td>
 </tr>
 <tr>
-<td><code>GET /api/v1/index?from&amp;to&amp;q</code></td>
-<td>Matching index records</td>
+<td><code>GET</code>/<code>POST /api/v1/indexing</code></td>
+<td>GPT indexing switch</td>
 </tr>
 <tr>
-<td><code>GET /api/v1/events?from&amp;to&amp;since_id</code></td>
-<td>Events (poll for alerts)</td>
+<td><code>GET</code>/<code>POST /api/v1/jev</code></td>
+<td>JEV indexing switch</td>
 </tr>
 <tr>
-<td><code>POST /api/v1/marks</code></td>
-<td><code>{&quot;label&quot;:&quot;step 12: pick tip&quot;,&quot;t?&quot;:...}</code></td>
+<td><code>GET</code>/<code>PUT /api/v1/nouls</code></td>
+<td>Noul configuration</td>
 </tr>
 <tr>
-<td><code>POST /api/v1/ask</code></td>
-<td><code>{&quot;question&quot;:&quot;...&quot;}</code> → answer with cited moments</td>
+<td><code>GET</code>/<code>PUT /api/v1/nouls/.../examples/...</code></td>
+<td>Example JPEGs</td>
 </tr>
 <tr>
-<td><code>GET</code>/<code>PATCH /api/v1/config</code></td>
-<td>Settings; secrets are write-only</td>
-</tr>
-<tr>
-<td><code>POST /api/v1/ota</code></td>
-<td>Firmware URL or upload (admin)</td>
+<td><code>GET</code>/<code>POST /api/v1/perf</code></td>
+<td>High performance mode</td>
 </tr>
 <tr>
 <td><code>POST /mcp</code></td>
-<td>MCP Streamable HTTP endpoint</td>
+<td>MCP endpoint</td>
+</tr>
+<tr>
+<td><code>POST /api/register</code></td>
+<td>Registrar registration (from camera)</td>
 </tr>
 </tbody>
 </table>
-<p>Times are accepted as RFC 3339, as local wall time
-(<code>12:00</code>, interpreted in <code>time.tz</code> for today), or
-as relative times (<code>-30m</code>).</p>
-<h2 id="provisioning-and-configuration">9. Provisioning and
-configuration</h2>
+<p><strong>Not implemented yet</strong> (still in the October wishlist):
+live MJPEG stream URL, <code>clip.avi</code>,
+<code>POST /api/v1/ask</code>, <code>POST /api/v1/marks</code>,
+<code>GET /api/v1/events</code> poll,
+<code>GET</code>/<code>PATCH /api/v1/config</code>,
+<code>POST /api/v1/ota</code>, mDNS <code>_cambot._tcp</code>, SoftAP /
+Improv provisioning.</p>
+<h2 id="provisioning-and-configuration-today">9. Provisioning and
+configuration (today)</h2>
 <ul>
-<li><strong>Serial (default, agent-friendly).</strong> The firmware
-speaks the open <strong>Improv Wi-Fi serial</strong> protocol on the TTL
-UART at 115200, plus a line-based JSON console
-(<code>{&quot;cmd&quot;:&quot;wifi.set&quot;,...}</code>) for everything else.
-<code>cambot provision</code> wraps both.</li>
-<li><strong>Browser flasher.</strong> ESP Web Tools on GitHub Pages
-flashes the board and runs Improv in Chrome or Edge, with no
-installs.</li>
-<li><strong>SoftAP fallback.</strong> With no stored network, or after
-holding BOOT for 5 s, the camera opens <code>Cambot-Setup-AB12</code>
-with a portal at <code>192.168.4.1</code>.</li>
-<li><strong>Identity.</strong> The hostname
-<code>cambot-&lt;last 4 hex of MAC&gt;</code> is advertised over mDNS as
-<code>_http._tcp</code> and <code>_cambot._tcp</code>, with TXT
-<code>id</code>, <code>fw</code> and <code>board</code>.</li>
-<li><strong>Token.</strong> Generated at first provisioning and returned
-once over serial to the CLI, which stores it in the OS keychain. It can
-be rotated with <code>cambot token rotate</code>.</li>
+<li><strong>Compile-time secrets.</strong> Copy
+<code>firmware/main/secrets.h.example</code> to <code>secrets.h</code>.
+Fill SSID, Wi-Fi password, camera password, registrar URL and model
+keys. Never commit the copy.</li>
+<li><strong>Flash.</strong> ESP-IDF 5.x on the TTL UART (CH340) at
+115200. Physical BOOT/RST steps are in <code>fixr/SETUP.md</code>.</li>
+<li><strong>Join and register.</strong> Firmware joins the 2.4 GHz
+network, serves HTTP, and POSTs <code>/api/register</code> to the
+registrar on a timer.</li>
+<li><strong>Host secrets.</strong> <code>CAMBOT_CAMERA_PASSWORD</code>,
+<code>CAMBOT_WIFI_PASSWORD</code>, <code>CAMBOT_MODEL_KEY</code> via
+environment or <code>fixr/run/secrets.env</code>.</li>
 </ul>
-<p>Log lines use the <code>key=value</code> style from the prototype
-(<code>wifi=ip=...</code>, <code>sd=ok size_gb=29.7</code>,
-<code>time=synced</code>) so people and agents can grep them.</p>
-<h2 id="cambot-cli-python">10. <code>cambot</code> CLI (Python)</h2>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>Command</th>
-<th>Does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cambot doctor</code></td>
-<td>Checks Python, esptool, ports, drivers and ffmpeg, then prints
-fixes</td>
-</tr>
-<tr>
-<td><code>cambot ports</code></td>
-<td>Lists serial ports and labels them TTL (CH340, VID 1a86) or OTG (VID
-303a)</td>
-</tr>
-<tr>
-<td><code>cambot flash [--port] [--board]</code></td>
-<td>Downloads the release, then runs esptool at 115200 on TTL</td>
-</tr>
-<tr>
-<td><code>cambot provision --ssid</code></td>
-<td>Improv Wi-Fi. The password comes from
-<code>CAMBOT_WIFI_PASSWORD</code> or a hidden prompt. Saves the
-token.</td>
-</tr>
-<tr>
-<td><code>cambot discover</code></td>
-<td>Finds cameras over mDNS, then checks each with
-<code>/ping</code></td>
-</tr>
-<tr>
-<td><code>cambot status/ask/pull/export</code></td>
-<td>API wrappers; <code>export</code> produces MP4 with ffmpeg</td>
-</tr>
-<tr>
-<td><code>cambot config set/get</code></td>
-<td>Config. <code>-</code> reads a secret from stdin.</td>
-</tr>
-<tr>
-<td><code>cambot mcp-config</code></td>
-<td>Prints a ready <code>.cursor/mcp.json</code> entry</td>
-</tr>
-<tr>
-<td><code>cambot logs</code></td>
-<td>Tails the TTL serial log</td>
-</tr>
-</tbody>
-</table>
-<h2 id="testing-and-ci">11. Testing and CI</h2>
+<p>Planned replacements: Improv serial, SoftAP portal, NVS-backed
+config, token rotation via a <code>cambot</code> CLI, browser
+flasher.</p>
+<h2 id="registrar-lan-host">10. Registrar (LAN host)</h2>
+<p><code>fixr/registrar/serve.py</code> is the human UI and the ask
+path:</p>
 <ul>
-<li><strong>Host tests (CI):</strong> ring-buffer eviction, index merge,
-query parsing, AVI muxing and agent loop logic against a mocked model.
-These are built with the IDF <code>linux</code> target or plain
-CMake.</li>
-<li><strong>Firmware builds (CI):</strong> one job per board BSP.
-Release artifacts are a merged factory binary, an OTA binary, the web
-flasher manifest and checksums.</li>
-<li><strong>Hardware-in-the-loop (HIL, manual or self-hosted
-runner):</strong> <code>test/hil/smoke.py</code> flashes, provisions,
-waits for <code>time=synced</code>, records two minutes, then checks the
-frame index, clip export and <code>/ask</code> on a mocked model.</li>
-<li><strong>Search evaluation:</strong> <code>test/eval/</code> holds
-recorded robot sessions with human-labeled events (tip pickup, drop,
-pour). Each release reports recall and timing error for the standard
-questions.</li>
+<li>Lists registered cameras; proxies <code>frame.jpg</code> and
+<code>index/latest</code> with the bearer token (never printed).</li>
+<li>Edits nouls and example images; toggles GPT indexing, JEV indexing,
+High performance and Dev mode (idle → turn indexing off).</li>
+<li>Draws noul boxes on the live image; charts recent scores.</li>
+<li>Syncs index lines into <code>fixr/run/index.sqlite</code> and
+answers questions with gpt-4.1-mini from that history so the camera
+stays reachable.</li>
+</ul>
+<p>HIL helpers: <code>test/hil/jev_watch.py</code>,
+<code>perf_check.py</code>, <code>record_check.py</code>.</p>
+<h2 id="testing">11. Testing</h2>
+<ul>
+<li><strong>Host tests:</strong> <code>pytest</code> over
+<code>host/cambot_*</code> and registrar UX
+(<code>test/test_registrar_ux.py</code>, model adapters,
+store/index/mcp).</li>
+<li><strong>C helpers:</strong> motion, idx and LLM body builders under
+<code>test/host/c/</code>.</li>
+<li><strong>HIL:</strong> manual scripts against a flashed board and a
+running registrar.</li>
+<li><strong>CI / eval / web flasher:</strong> not wired yet.</li>
 </ul>
 <h2 id="milestones">12. Milestones</h2>
 <table>
@@ -782,60 +613,68 @@ questions.</li>
 <tr>
 <th>Milestone</th>
 <th>Scope</th>
-<th>Exit criterion</th>
+<th>Status</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>M0</td>
-<td>IDF skeleton, FORIOT BSP, camera, SD mount</td>
-<td>Frames on SD with a valid index</td>
+<td>IDF project, FORIOT pins, camera, SD</td>
+<td><strong>Done</strong></td>
 </tr>
 <tr>
 <td>M1</td>
-<td>Recorder, eviction, REST, live view, clips</td>
-<td>24 h soak with no dropped segments and eviction working</td>
+<td>Recorder, eviction, REST frame/status/recordings/clips</td>
+<td><strong>Done</strong></td>
 </tr>
 <tr>
 <td>M2</td>
-<td>Improv, SoftAP, CLI, web flasher, SETUP.md</td>
-<td>A fresh board reaches the network by following SETUP.md, with an
-agent driving</td>
+<td>Improv, SoftAP, <code>cambot</code> CLI, web flasher</td>
+<td><strong>Not started</strong></td>
 </tr>
 <tr>
 <td>M3</td>
-<td>Activity, indexer, watch list, marks, search</td>
-<td>Eval recall ≥ 0.8 on tip-pickup sessions at default budget</td>
+<td>Motion, on-device GPT + JEV, nouls, registrar live UI</td>
+<td><strong>Done</strong></td>
 </tr>
 <tr>
-<td>M4</td>
-<td>Agent <code>/ask</code>, MCP server</td>
-<td>The headline question answered correctly with clips from Cursor via
-MCP</td>
+<td>M4a</td>
+<td>MCP on camera; registrar ask + SQLite history</td>
+<td><strong>Done</strong></td>
+</tr>
+<tr>
+<td>M4b</td>
+<td>On-board <code>/ask</code>, marks, richer index/events HTTP</td>
+<td>Planned</td>
 </tr>
 <tr>
 <td>M5</td>
-<td>OTA with rollback, encrypted builds, second BSP</td>
-<td>OTA tested on both boards</td>
+<td>OTA rollback, encrypted builds, second BSP</td>
+<td>Planned</td>
 </tr>
 <tr>
 <td>Later</td>
 <td>Embeddings, multi-camera hub</td>
-<td></td>
+<td>Planned</td>
 </tr>
 </tbody>
 </table>
 <h2 id="contributor-rules-agents.md-summary">13. Contributor rules
 (<code>AGENTS.md</code> summary)</h2>
 <ul>
-<li>Never commit secrets. <code>firmware/main/secrets.h</code> and
-<code>.env</code> are gitignored; examples ship as
-<code>*.example</code>.</li>
-<li>Keep the storage format and API versioned. Breaking changes bump
-<code>v1</code> to <code>v2</code>.</li>
-<li>Every new board adds a BSP and a board-kit CAD folder together.</li>
-<li>Recording comes before everything else. A pull request that can
-block the recorder task is rejected.</li>
+<li>Never commit secrets. <code>firmware/main/secrets.h</code>,
+<code>.env</code>, API key files and <code>fixr/run/</code> stay
+gitignored.</li>
+<li>Prefer environment variables or hidden prompts for Wi-Fi password,
+camera password and model keys. Never print them.</li>
+<li>Recording comes before everything else. A change that blocks the
+recorder task is rejected.</li>
+<li>Printable kit changes go through the generators, exports and
+<code>manifest.json</code> together.</li>
+<li>Ask before formatting an SD card, erasing flash or rotating a
+token.</li>
+<li>Until M2 ships, do not invent <code>cambot</code> CLI commands;
+follow <code>fixr/SETUP.md</code>.</li>
 </ul>
 </body>
 </html>

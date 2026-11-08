@@ -1,8 +1,9 @@
 # Agent instructions
 
-This repository is the Gizmonic Cambot specification, the bring-up firmware in
-`firmware/`, and the printable case in `hardware/`. The `cambot` command
-described in the documents does not exist here yet.
+This repository is Gizmonic Cambot: the bring-up firmware in `firmware/`, the
+printable case in `hardware/`, the FIXR setup path and registrar, and the
+design documents. The `cambot` CLI described for milestone M2 does not exist
+here yet.
 
 ## Which document to follow
 
@@ -19,8 +20,7 @@ described in the documents does not exist here yet.
   the generator under `source/`, regenerate, and update the exports and
   checksums together.
 - Firmware, API, storage format, or repository layout: `docs/src/firmware-repo-plan.md`.
-  Section 13 of that plan is the contributor rule set for the future firmware
-  repository.
+  Section 13 of that plan is the contributor rule set for this repository.
 
 ## Setup contract
 

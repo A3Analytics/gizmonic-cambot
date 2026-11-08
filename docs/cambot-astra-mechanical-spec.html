@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Gizmonic Cambot project · open hardware (CERN-OHL-P-2.0)" />
-  <title>Gizmonic Cambot: mechanical specification for CAD</title>
+  <title>Gizmonic Cambot: mechanical specification</title>
   <style>
 
 code{white-space: pre-wrap;}
@@ -197,45 +197,51 @@ break-before: page;
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Gizmonic Cambot: mechanical specification for CAD</h1>
-<p class="subtitle">Case, board sled, W-Mount interface, screw clamp and
-magnet puck · for Astra</p>
+<h1 class="title">Gizmonic Cambot: mechanical specification</h1>
+<p class="subtitle">PETG housing, retainer, modular arms and dual-magnet
+foot · W-Mount contract</p>
 <p class="author">Gizmonic Cambot project · open hardware
 (CERN-OHL-P-2.0)</p>
-<p class="date">Spec rev A · October 2026</p>
+<p class="date">Spec rev B · November 2026</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#purpose-and-deliverables" id="toc-purpose-and-deliverables">1. Purpose and deliverables</a></li>
-<li><a href="#system-overview" id="toc-system-overview">2. System
-overview</a></li>
+<li><a href="#system-overview-current-kit" id="toc-system-overview-current-kit">2. System overview (current
+kit)</a></li>
 <li><a href="#reference-board-foriot-esp32-s3-cam" id="toc-reference-board-foriot-esp32-s3-cam">3. Reference board: FORIOT
 ESP32-S3-CAM</a></li>
 <li><a href="#design-rules-for-all-parts" id="toc-design-rules-for-all-parts">4. Design rules for all
 parts</a></li>
-<li><a href="#body" id="toc-body">5. Body</a></li>
+<li><a href="#body-current-kit" id="toc-body-current-kit">5. Body
+(current kit)</a></li>
 <li><a href="#w-mount-interface-fixed-contract" id="toc-w-mount-interface-fixed-contract">6. W-Mount interface (fixed
 contract)</a></li>
-<li><a href="#feet" id="toc-feet">7. Feet</a></li>
-<li><a href="#assembly-for-parts.md" id="toc-assembly-for-parts.md">8.
-Assembly (for <code>PARTS.md</code>)</a></li>
-<li><a href="#acceptance-checks" id="toc-acceptance-checks">9.
+<li><a href="#arms-and-foot" id="toc-arms-and-foot">7. Arms and
+foot</a></li>
+<li><a href="#future-deferred-parts" id="toc-future-deferred-parts">8.
+Future / deferred parts</a></li>
+<li><a href="#assembly-minimum-kit" id="toc-assembly-minimum-kit">9.
+Assembly (minimum kit)</a></li>
+<li><a href="#acceptance-checks" id="toc-acceptance-checks">10.
 Acceptance checks</a></li>
-<li><a href="#open-questions-for-astra" id="toc-open-questions-for-astra">10. Open questions for Astra</a></li>
+<li><a href="#open-questions" id="toc-open-questions">11. Open
+questions</a></li>
 </ul>
 </nav>
 <h2 id="purpose-and-deliverables">1. Purpose and deliverables</h2>
-<p>Design a 3D-printable enclosure and modular mounting system for the
-Cambot camera, a monitoring camera built on the FORIOT ESP32-S3-CAM
-board. Every part must print on a hobby FDM printer without supports
-unless noted, and must be fully parametric so the community can change
-it.</p>
-<p><strong>Deliverables, per part:</strong></p>
+<p>Document the 3D-printable enclosure and modular mount for the Cambot
+camera on the FORIOT ESP32-S3-CAM board, and keep the
+<strong>W-Mount</strong> interface stable so community feet and arms can
+mate with it.</p>
+<p><strong>Source of truth for printable files:</strong> the frozen
+release under <code>hardware/cambot-minimum-petg-kit/</code> (release
+<strong>2026-11-04</strong>). That kit ships STL, STEP and 3MF exports
+checked by <code>manifest.json</code>, CadQuery generators under
+<code>source/</code>, and a kit README with PETG settings, hardware and
+assembly. Edit the generators, regenerate, and update exports and
+checksums together.</p>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Format</th>
@@ -244,28 +250,24 @@ it.</p>
 </thead>
 <tbody>
 <tr>
-<td>Parametric source (OpenSCAD or CadQuery preferred; FreeCAD
-acceptable)</td>
-<td>Community edits. Every parameter in this document is a named
-variable.</td>
+<td>CadQuery Python under <code>source/</code></td>
+<td>Parametric edits</td>
 </tr>
 <tr>
-<td>STEP (AP214 or AP242)</td>
-<td>Interchange with other CAD</td>
+<td>STEP</td>
+<td>CAD interchange</td>
 </tr>
 <tr>
-<td>STL, plus 3MF with print orientation already set</td>
+<td>STL and oriented 3MF</td>
 <td>Printing</td>
 </tr>
 <tr>
-<td>PNG renders: isometric, exploded, and each part in print
-orientation</td>
-<td>Docs and README</td>
+<td>Plate 3MFs in <code>plates/</code></td>
+<td>Grouped print layouts</td>
 </tr>
 <tr>
-<td><code>PARTS.md</code> listing each file, its material, orientation
-and hardware</td>
-<td>Assembly</td>
+<td>Kit <code>README.md</code> + <code>LICENSE.md</code></td>
+<td>Print, assembly, provenance</td>
 </tr>
 </tbody>
 </table>
@@ -274,52 +276,81 @@ printed part.</p>
 <div class="note">
 <p><strong>Dimensions marked TBV (to be verified)</strong> come from
 vendor listings or clone boards, not from calipers. Before freezing
-geometry, measure them on a physical board. The Gizmonic Cambot team
-will supply calipered values and photos on request. Every TBV value must
-be a top-level parameter.</p>
+geometry that depends on them, measure a physical board. Every TBV value
+should stay a top-level parameter in the generators.</p>
 </div>
-<h2 id="system-overview">2. System overview</h2>
-<p>The design has three tiers. Only the board kit changes when a
-different camera board is supported.</p>
+<h2 id="system-overview-current-kit">2. System overview (current
+kit)</h2>
+<p>The minimum PETG kit is an <strong>open housing</strong> with modular
+W-Mount arms and a dual external-magnet foot. It deliberately omits a
+front cover, screw clamp and embedded-magnet puck.</p>
 <table>
 <colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
+<col style="width: 50%" />
+<col style="width: 50%" />
 </colgroup>
 <thead>
 <tr>
-<th>Tier</th>
-<th>Parts</th>
-<th>Changes per board?</th>
+<th>Part</th>
+<th>Role</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Board kit</td>
-<td><code>sled</code>, <code>front_cover</code></td>
-<td>Yes</td>
+<td><code>housing_v3</code></td>
+<td>Drop-in body, two center posts, header clearance, camera-side
+<code>knuckle2</code></td>
 </tr>
 <tr>
-<td>Universal body</td>
-<td><code>rear_shell</code>, <code>sd_door</code>,
-<code>button_pins</code></td>
-<td>No</td>
+<td><code>retainer_v3_short</code></td>
+<td>Short bridge retainer that latches over the PCB</td>
 </tr>
 <tr>
-<td>Feet</td>
-<td><code>foot_clamp</code> (+ <code>clamp_screw</code>,
-<code>clamp_pad</code>, <code>clamp_nut</code>),
-<code>foot_magnet</code>, <code>foot_template</code></td>
-<td>No</td>
+<td><code>rod_male_25</code> / <code>rod_male_50</code></td>
+<td>Two-finger arm with 12 mm spigot</td>
+</tr>
+<tr>
+<td><code>rod_female_25_6-32</code> /
+<code>rod_female_50_6-32</code></td>
+<td>Three-finger arm with bore and 6-32 locking pilot</td>
+</tr>
+<tr>
+<td><code>dual_magnet_foot</code></td>
+<td>Three-finger base; magnets mount under the plate against steel</td>
 </tr>
 </tbody>
 </table>
-<p>The board kit and rear shell meet at a fixed <strong>shell
-interface</strong> (section 5.4). The shell and feet meet at the
-<strong>W-Mount</strong> (section 6). These two interfaces are the
-stable contracts. Publish them as separate parametric modules so others
-can design against them.</p>
+<p>Only five pieces assemble into one mount: housing, retainer, one male
+rod, one female rod, and the foot. The unused rod lengths are
+alternatives.</p>
+<table>
+<thead>
+<tr>
+<th>Male + female shafts</th>
+<th>Approx. pivot-to-pivot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>25 + 25</td>
+<td>92–96 mm</td>
+</tr>
+<tr>
+<td>25 + 50 (or 50 + 25)</td>
+<td>117–121 mm</td>
+</tr>
+<tr>
+<td>50 + 50</td>
+<td>142–146 mm</td>
+</tr>
+</tbody>
+</table>
+<p>These are pivot distances, not steel-to-lens reach. Reach also
+depends on joint angles and magnet thickness.</p>
+<p>The housing and feet meet at the <strong>W-Mount</strong> (section
+6). That interface is the stable contract. Publish <code>knuckle2</code>
+/ <code>knuckle3</code> as standalone modules (the kit already does this
+in <code>w_mount.py</code>).</p>
 <h2 id="reference-board-foriot-esp32-s3-cam">3. Reference board: FORIOT
 ESP32-S3-CAM</h2>
 <p>Orientation used throughout: hold the board component side toward
@@ -353,8 +384,8 @@ header pins.</p>
 </tr>
 <tr>
 <td>Mounting holes</td>
-<td>None. Retain by edges only.</td>
-<td>TBV</td>
+<td>None. Kit retains on two center posts + retainer.</td>
+<td>Confirmed in kit</td>
 </tr>
 <tr>
 <td>Header rows</td>
@@ -364,7 +395,7 @@ header pins.</p>
 <tr>
 <td>Header pins on rear (if soldered)</td>
 <td>Up to 8.5 mm below the PCB rear face</td>
-<td>Design for both soldered and unsoldered</td>
+<td>Housing clears headers</td>
 </tr>
 <tr>
 <td>Tallest front component, excluding the camera</td>
@@ -374,7 +405,8 @@ header pins.</p>
 <tr>
 <td>Antenna keep-out</td>
 <td>Top ~6 mm of the PCB (module antenna)</td>
-<td>TBV</td>
+<td>Retainer opening ~24 mm for ~17.7 mm antenna width; fit still
+TBV</td>
 </tr>
 <tr>
 <td>USB-C ports</td>
@@ -389,17 +421,17 @@ header pins.</p>
 <tr>
 <td>Buttons</td>
 <td>RST and BOOT near the USB edge, front side</td>
-<td>Positions TBV</td>
+<td>Open housing; accessible</td>
 </tr>
 <tr>
 <td>LEDs</td>
 <td>Power, TX, WS2812 RGB (GPIO 48), user LED (GPIO 2)</td>
-<td>Positions TBV</td>
+<td>Open housing</td>
 </tr>
 <tr>
 <td>microSD</td>
 <td>Push-push slot on rear; card insertion edge</td>
-<td>TBV</td>
+<td>Access with housing open / unmounted</td>
 </tr>
 <tr>
 <td>Camera</td>
@@ -410,9 +442,9 @@ header pins.</p>
 </table>
 <p><strong>Camera module (TBV):</strong> typical modules are about 8.5 ×
 8.5 mm with an M8-class lens barrel about 8 mm in diameter. Wide-angle
-variants (120° and 160°) of the OV3660 fit the same connector. The front
-window must work with lens fields of view from 66° to 160° (section
-5.2).</p>
+variants (120° and 160°) of the OV3660 fit the same connector. A future
+front cover (section 8) must work with lens fields of view from 66° to
+160°.</p>
 <h2 id="design-rules-for-all-parts">4. Design rules for all parts</h2>
 <table>
 <colgroup>
@@ -432,8 +464,7 @@ window must work with lens fields of view from 66° to 160° (section
 </tr>
 <tr>
 <td>Materials</td>
-<td>PETG (default) or ASA. PLA allowed for indoor prototypes. Optional
-TPU for pads.</td>
+<td>PETG (default). PLA allowed for indoor prototypes.</td>
 </tr>
 <tr>
 <td>Minimum wall</td>
@@ -441,33 +472,25 @@ TPU for pads.</td>
 </tr>
 <tr>
 <td>Sliding fit</td>
-<td>0.20 mm clearance per side (<code>fit_slide</code>)</td>
-</tr>
-<tr>
-<td>Snug/press fit</td>
-<td>0.10 mm per side (<code>fit_press</code>)</td>
-</tr>
-<tr>
-<td>Printed thread radial clearance</td>
-<td>0.35 mm (<code>fit_thread</code>)</td>
+<td>Arms: 12 mm spigot into 12.4 mm bore, ≥ 20 mm engagement</td>
 </tr>
 <tr>
 <td>Overhangs</td>
-<td>≤ 45° without supports; bridges ≤ 15 mm</td>
+<td>Support as noted in the kit README; finger faces parallel to the
+bed</td>
 </tr>
 <tr>
-<td>Screws</td>
-<td>M2 self-tapping into Ø1.7 pilot holes, or M2 heat-set inserts (Ø3.2
-pocket) as an option (<code>use_inserts</code>)</td>
+<td>Pivots</td>
+<td>M5 bolt through W-Mount fingers with an M5 nut</td>
 </tr>
 <tr>
-<td>Edge treatment</td>
-<td>0.6 mm chamfer on outer edges; 1 mm fillets on hand-contact
-edges</td>
+<td>Arm lock</td>
+<td>6-32 machine screw into female-rod pilot; bears on male spigot</td>
 </tr>
 <tr>
-<td>Text</td>
-<td>Debossed 0.4 mm, ≥ 4 mm tall: “CAMBOT”, “TTL”, “OTG”, “SD”</td>
+<td>Magnets</td>
+<td>External rubber-coated assemblies under the foot (M4), not glued
+discs</td>
 </tr>
 <tr>
 <td>Metal near antenna</td>
@@ -475,169 +498,51 @@ edges</td>
 </tr>
 </tbody>
 </table>
-<h2 id="body">5. Body</h2>
-<h3 id="overall-envelope">5.1 Overall envelope</h3>
-<p>The interior is sized to accept the reference board and two planned
-future boards: the AI-Thinker ESP32-CAM (27 × 40.5 mm) and the Seeed
-XIAO ESP32S3 Sense (21 × 17.5 mm). Future sleds must fit without
-changing the rear shell.</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Default</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cavity_w</code> × <code>cavity_h</code></td>
-<td>32 × 67</td>
-<td>Inside the shell, PCB plane</td>
-</tr>
-<tr>
-<td><code>front_clear</code></td>
-<td>9.0</td>
-<td>PCB front face to inside of front cover, covers camera stack</td>
-</tr>
-<tr>
-<td><code>rear_clear</code></td>
-<td>9.5</td>
-<td>PCB rear face to inside of rear shell, covers header pins plus
-SD</td>
-</tr>
-<tr>
-<td><code>wall</code></td>
-<td>2.0</td>
-<td>Shell and cover walls</td>
-</tr>
-<tr>
-<td>Approx. outside size</td>
-<td>36 × 71 × 25</td>
-<td>Width × height × depth, before the knuckle</td>
-</tr>
-</tbody>
-</table>
-<p><code>rear_clear</code> may be reduced to 4.5 in a “no headers”
-variant for users who desolder or never fit the header pins. Expose it
-as a parameter and ship both STLs.</p>
-<h3 id="front-cover-board-kit">5.2 Front cover (board kit)</h3>
+<p>Starting PETG profile from the kit: 5 walls, 6 top/bottom layers,
+40–50% infill. Finer layers alone will not correct an interfering
+fit.</p>
+<h2 id="body-current-kit">5. Body (current kit)</h2>
+<h3 id="housing-housing_v3">5.1 Housing (<code>housing_v3</code>)</h3>
 <ul>
-<li><strong>Lens window.</strong> A round aperture centered on the lens
-axis (<code>lens_x</code>, <code>lens_y</code>, TBV). The lens front
-sits no more than <code>lens_recess</code> = 1.0 mm behind the cover’s
-outer face. Aperture diameter =
-<code>lens_od + 2 × lens_recess × tan(fov_half) + 0.6</code>, with
-<code>fov_half</code> = 80° by default so 160° lenses do not vignette.
-Add a 45° outward chamfer.</li>
-<li><strong>Camera retention.</strong> A square pocket on the inside,
-sized to the camera module plus <code>fit_slide</code>, holds the module
-square to the window. A printed spring finger or a 1 mm foam pad behind
-the module presses it forward. The lens must not touch the window
-edge.</li>
-<li><strong>Flex routing.</strong> A channel from the camera pocket to
-the board’s FPC connector, minimum bend radius 1.5 mm, with no sharp
-edges along the path. The flex must not be creased.</li>
-<li><strong>Light pipes.</strong> Optional 2 mm holes over the power LED
-and the WS2812 (<code>led_pipe = true</code>). Keep them at least 15 mm
-from the lens axis and add a 0.8 mm baffle ring so LED light cannot leak
-into the lens.</li>
-<li><strong>Button access.</strong> Ø2.5 mm holes over RST and BOOT for
-a paperclip, or captive printed push pins (<code>button_pins</code>
-part) with a 0.4 mm flexure retention lip.</li>
-<li><strong>Closure.</strong> Mates to the rear shell through the shell
-interface (5.4).</li>
+<li>Open drop-in body. The PCB sits on <strong>two center
+posts</strong>; there is no edge sled and no front cover in this
+release.</li>
+<li>Header clearance on the rear side of the cavity.</li>
+<li>Camera-side <strong>two-finger W-Mount</strong>
+(<code>knuckle2</code>) for the arm stack.</li>
+<li>Print orientation: on its side in the plate 3MF; support tray and
+mounting overhangs; clean the latch windows.</li>
 </ul>
-<h3 id="sled-board-kit">5.3 Sled (board kit)</h3>
+<h3 id="retainer-retainer_v3_short">5.2 Retainer
+(<code>retainer_v3_short</code>)</h3>
 <ul>
-<li>Holds the PCB by its long edges. Two rails with slots
-<code>pcb_t + 0.15</code> wide and 1.2 mm deep. The board slides in from
-the USB end toward an end stop at the antenna end.</li>
-<li>A flexing detent tab (0.8 mm thick, 6 mm long) clicks over the USB
-edge of the PCB to stop it sliding back out.</li>
-<li>The sled keeps the PCB centered in the cavity so the USB-C ports
-line up with the rear-shell openings to ±0.3 mm. Register it to the
-shell with two locating pins (Ø2.0) at fixed positions defined by the
-shell interface.</li>
-<li>Underside cutouts leave clear access to the SD slot and to header
-pins.</li>
-<li>Thermal: no material within 1 mm of the module shield’s top face;
-leave an air gap to the vents.</li>
+<li>4.5 mm thick bridge with a shortened span (7.3 mm removed relative
+to the earlier long retainer). Bridge inner edge is about 0.5 mm past
+the case end.</li>
+<li>Latches outward (not inward) over the housing.</li>
+<li>24 mm antenna opening. Longitudinal clearance still needs a test fit
+on each board.</li>
+<li>Print flat; preserve latch clearances; avoid support in those
+gaps.</li>
 </ul>
-<h3 id="shell-interface-fixed-contract">5.4 Shell interface (fixed
-contract)</h3>
-<p>This is the boundary between the board kit and the universal rear
-shell. It must stay fixed so any future board kit fits any rear
-shell.</p>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Spec</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Joint</td>
-<td>Tongue on the front cover (1.2 wide × 1.5 tall), groove on the rear
-shell (<code>1.2 + 2 × fit_slide</code>) around the full perimeter</td>
-</tr>
-<tr>
-<td>Fasteners</td>
-<td>2 × M2 × 8 screws through the front cover into rear-shell bosses, on
-the long sides, at least 15 mm from the antenna end</td>
-</tr>
-<tr>
-<td>Sled locating</td>
-<td>2 × Ø2.0 pins on the rear-shell floor; sled holes Ø2.0 +
-<code>fit_press</code></td>
-</tr>
-<tr>
-<td>Datum</td>
-<td>Interior cavity center, PCB plane at <code>rear_clear</code> above
-the rear-shell floor</td>
-</tr>
-</tbody>
-</table>
-<h3 id="rear-shell-universal">5.5 Rear shell (universal)</h3>
-<ul>
-<li><strong>USB-C openings.</strong> Two openings on the bottom face,
-each sized to the plug overmold (12.5 × 7.0 mm plus
-<code>fit_slide</code>), centered on the port positions. Deboss “TTL”
-and “OTG” beside them. If the two port centers are too close for two
-full overmold openings, use one combined slot and note it.</li>
-<li><strong>Cable strain relief.</strong> A zip-tie bridge (4 × 2 mm
-slot pair) on the bottom face beside the USB openings.</li>
-<li><strong>SD door.</strong> A sliding or snap door
-(<code>sd_door</code> part) over the card slot. The card must be
-insertable and ejectable (push-push) with the case closed and the door
-open.</li>
-<li><strong>Vents.</strong> Slots 1.2 mm wide on both long sides,
-alongside the ESP32 module and away from the lens. Total open area ≥ 60
-mm². No direct line of sight from a vent to the camera’s inside face, to
-keep out stray light.</li>
-<li><strong>W-Mount knuckle.</strong> A two-finger knuckle on the rear
-face (section 6), centered horizontally and placed 22 mm from the USB
-end (<code>knuckle_y</code>). The tilt axis is parallel to the short
-edge, so the camera tilts up and down.</li>
-<li><strong>Antenna end.</strong> Keep the top 15 mm of the shell free
-of metal and of solid walls thicker than <code>wall</code>.</li>
-</ul>
+<h3 id="assembly-of-board-into-housing">5.3 Assembly of board into
+housing</h3>
+<ol type="1">
+<li>Clean and test-fit the empty housing and retainer.</li>
+<li>Drop the PCB onto the two center posts (antenna end toward the
+retainer opening).</li>
+<li>Seat the retainer. Check antenna, header, camera ribbon and USB
+clearance.</li>
+<li>Insert the microSD card before or after seating, as access
+allows.</li>
+</ol>
+<p>No M2 case screws are used in the minimum kit.</p>
 <h2 id="w-mount-interface-fixed-contract">6. W-Mount interface (fixed
 contract)</h2>
 <p>The W-Mount follows the de facto GoPro finger mount, so off-the-shelf
-GoPro accessories work. <strong>Astra must check the final parameters
-against a genuine GoPro buckle and adjust them until both mate with a
-firm, wobble-free fit.</strong></p>
+GoPro accessories work. <strong>Check the final parameters against a
+genuine GoPro buckle and adjust until both mate with a firm, wobble-free
+fit.</strong></p>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -678,220 +583,190 @@ firm, wobble-free fit.</strong></p>
 <td>Clearance for M5</td>
 </tr>
 <tr>
-<td>Camera side (<code>knuckle2</code>)</td>
+<td>Camera / male-rod side (<code>knuckle2</code>)</td>
 <td>2 fingers</td>
 <td>Total width 9.2</td>
 </tr>
 <tr>
-<td>Foot side (<code>knuckle3</code>)</td>
+<td>Foot / female-rod side (<code>knuckle3</code>)</td>
 <td>3 fingers</td>
-<td>Total width 15.4. One outer finger has a captive M5 hex-nut pocket,
-8.1 mm across flats × 4.0 deep.</td>
+<td>Total width 15.4. One outer finger has a captive M5 hex-nut
+pocket.</td>
 </tr>
 <tr>
 <td>Bolt</td>
 <td>M5 × 25 thumbscrew or socket-head bolt</td>
-<td>Printed knob cap <code>m5_knob</code> for socket heads</td>
+<td>Verify reach with your hardware</td>
 </tr>
 </tbody>
 </table>
 <p>Print fingers so the layers stack across the finger thickness (finger
 faces parallel to the bed). This avoids layer splits at the pivot.
 Fillet the finger roots with r = 1.5.</p>
-<p>Publish <code>knuckle2()</code> and <code>knuckle3()</code> as
-standalone modules in their own file (<code>w_mount.scad</code> or
-<code>w_mount.py</code>), with a doc comment showing how to attach them
-to a custom base.</p>
-<h2 id="feet">7. Feet</h2>
-<h3 id="screw-clamp-foot_clamp">7.1 Screw clamp
-(<code>foot_clamp</code>)</h3>
-<p>A C-clamp for shelf edges, robot frames, 2020/3030 extrusion, bench
-tops and tubes.</p>
+<p>The kit modules live in each generator’s <code>w_mount.py</code>.
+Keep them consistent across housing, arms and foot.</p>
+<h2 id="arms-and-foot">7. Arms and foot</h2>
+<h3 id="modular-arms">7.1 Modular arms</h3>
 <table>
 <colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
+<col style="width: 50%" />
+<col style="width: 50%" />
 </colgroup>
 <thead>
 <tr>
-<th>Parameter</th>
-<th>Default</th>
-<th>Notes</th>
+<th>Feature</th>
+<th>Spec</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>jaw_open</code></td>
-<td>35</td>
-<td>Maximum opening; 0 is the minimum</td>
+<td>Shaft lengths</td>
+<td>25 mm and 50 mm (male and female)</td>
 </tr>
 <tr>
-<td><code>throat</code></td>
-<td>25</td>
-<td>Depth from jaw edge to the frame’s back</td>
+<td>Spigot / bore</td>
+<td>Ø12 mm spigot into Ø12.4 mm bore</td>
 </tr>
 <tr>
-<td><code>frame_section</code></td>
-<td>10 × 14</td>
-<td>Cross-section of the C frame. Stiff enough in PETG for hand
-tightening.</td>
+<td>Engagement</td>
+<td>Minimum 20 mm; groove must be fully hidden (20–24 mm insertion)</td>
 </tr>
 <tr>
-<td>Thread</td>
-<td>Tr14 × 3 trapezoidal, printed</td>
-<td><code>fit_thread</code> clearance</td>
+<td>Lock</td>
+<td>6-32 × ~3/8 in machine screw in female pilot; forms thread in PETG
+by hand</td>
 </tr>
 <tr>
-<td>Screw length</td>
-<td><code>jaw_open + 20</code></td>
-<td></td>
-</tr>
-<tr>
-<td>Knob</td>
-<td>Ø30 knurled, or a 40 mm T-bar (<code>knob_style</code>)</td>
-<td></td>
-</tr>
-<tr>
-<td>Pad</td>
-<td>Ø20 swivel pad, snap-fit ball (Ø8) into a socket on the screw
-tip</td>
-<td>TPU or PETG face, 1 mm grip ridges</td>
-</tr>
-<tr>
-<td>Fixed jaw</td>
-<td>20 × 14 face with 1 mm ridges; optional TPU overlay</td>
-<td></td>
-</tr>
-<tr>
-<td>Knuckle</td>
-<td><code>knuckle3</code> on the back of the frame, axis parallel to the
-jaw faces by default</td>
-<td><code>knuckle_axis</code> = 0° or 90°</td>
+<td>Joints</td>
+<td>Male rod: <code>knuckle2</code>. Female rod:
+<code>knuckle3</code>.</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Print orientation.</strong> Print the C frame lying flat,
-with the C shape in the XY plane, so bending loads run along the layers.
-The internal thread would then print sideways, so the frame instead has
-a hex pocket that accepts a separate printed
-<strong><code>clamp_nut</code></strong>, printed upright for clean
-threads and pressed in (<code>fit_press</code>). Provide a variant
-pocket that accepts a steel M8 nut, with an M8 bolt in place of the
-printed screw (<code>steel_screw = true</code>). Print the screw
-upright.</p>
-<p><strong>Load check.</strong> The clamp must hold a camera (under 60
-g) cantilevered 60 mm from the jaw under hand tightening without
-slipping, and survive 20 tighten and loosen cycles without the thread
-wearing out.</p>
-<h3 id="magnet-puck-foot_magnet">7.2 Magnet puck
-(<code>foot_magnet</code>)</h3>
-<p>A puck that sticks to steel enclosures, machine frames and steel
-plates. Magnets slide in from the side and are glued in place.</p>
+<p>There is no positive pullout catch; the set screw bears on the
+spigot. Intended for occasional repositioning, not continuous adjustment
+under load.</p>
+<p><strong>Print orientation.</strong> Horizontal with finger faces on
+the bed. Support round undersides and projecting fingers; clear the bore
+before assembly.</p>
+<h3 id="dual-magnet-foot-dual_magnet_foot">7.2 Dual-magnet foot
+(<code>dual_magnet_foot</code>)</h3>
 <table>
 <colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
+<col style="width: 50%" />
+<col style="width: 50%" />
 </colgroup>
 <thead>
 <tr>
-<th>Parameter</th>
-<th>Default</th>
-<th>Notes</th>
+<th>Feature</th>
+<th>Spec</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>puck_d</code> × <code>puck_h</code></td>
-<td>40 × 9</td>
-<td></td>
+<td>Plate</td>
+<td>~32 mm wide, 6 mm thick, reinforced joint roots</td>
 </tr>
 <tr>
-<td><code>magnet_shape</code></td>
-<td><code>disc</code></td>
-<td><code>disc</code> or <code>block</code></td>
+<td>Magnet spacing</td>
+<td>56 mm centers</td>
 </tr>
 <tr>
-<td>Disc magnets</td>
-<td>4 × Ø10 × 3 mm N52</td>
-<td>Pockets <code>Ø10.2 × 3.15</code></td>
+<td>Magnets</td>
+<td>Two rubber-coated mounting magnets, nominal Ø22 mm with M4
+stud/thread (25–30 mm also fit; 32 mm max without overhang)</td>
 </tr>
 <tr>
-<td>Block magnets (alt.)</td>
-<td>2 × 20 × 10 × 3 mm N52</td>
-<td>Pockets <code>20.2 × 10.2 × 3.15</code></td>
+<td>Mounting</td>
+<td>Magnets under the flat base, magnetic face against steel; M4 washers
+(~12 mm OD) in top recesses with metal fasteners</td>
 </tr>
 <tr>
-<td><code>skin</code></td>
-<td>0.4</td>
-<td>Plastic between the magnet and the contact face. 0 leaves the magnet
-face flush and exposed.</td>
-</tr>
-<tr>
-<td>Pocket entry</td>
-<td>Each pocket opens to the puck’s outer edge through a slot of the
-same section, so a magnet slides in radially</td>
-<td></td>
-</tr>
-<tr>
-<td>Retention</td>
-<td>A 0.15 mm detent bump at the slot mouth, plus a Ø1.8 glue port from
-the top face into each pocket for CA or epoxy</td>
-<td></td>
-</tr>
-<tr>
-<td>Contact face</td>
-<td>Optional 0.8 mm recess for a 40 mm self-adhesive silicone or TPU
-anti-slip disc</td>
-<td><code>grip_recess</code></td>
+<td>Peel lip</td>
+<td>Lever the foot off steel at the lip; do not pull on the rods</td>
 </tr>
 <tr>
 <td>Knuckle</td>
-<td><code>knuckle3</code> on the top face, centered</td>
-<td></td>
-</tr>
-<tr>
-<td>Pry notch</td>
-<td>6 × 2 mm notch on the rim to lever the puck off steel</td>
-<td></td>
+<td><code>knuckle3</code> on the top</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Print orientation.</strong> Print the contact face down on
-the bed so the skin is smooth and flat. Pocket ceilings are bridges of
-10–20 mm, which is acceptable.</p>
-<p><strong>Notes for the user guide.</strong> Magnet polarity does not
-matter on thick steel. Alternating N/S between pockets grips thin sheet
-better. Four Ø10 × 3 N52 discs behind a 0.4 mm skin hold the camera on a
-vertical steel face with a large safety margin. Keep the puck at least
-15 mm from the camera’s antenna end.</p>
-<h3 id="foot-template-foot_template">7.3 Foot template
-(<code>foot_template</code>)</h3>
-<p>A minimal example of a custom foot: a 30 × 30 × 4 base plate with
-<code>knuckle3</code>, two M3 through holes and a VHB tape recess.
-Include a short comment block that explains how to attach
-<code>knuckle3()</code> to any geometry. This is the starting point for
-community feet such as zip-tie, 2020 T-slot, 1/4”-20 tripod adapter and
-suction cup.</p>
-<h2 id="assembly-for-parts.md">8. Assembly (for
-<code>PARTS.md</code>)</h2>
+<p>Reference magnet class: rubber-coated outdoor magnetic assembly base,
+~8 lb pull rating (manufacturer figure; not a validated arm working
+load). Confirm stud length / thread depth before choosing nuts vs
+screws; do not crush the 4 mm of PETG under each washer recess.</p>
+<p><strong>Print orientation.</strong> Long side edge, finger faces
+parallel to the bed; brim and support on projecting fingers. STEP is
+assembly orientation; use 3MF/STL for print orientation.</p>
+<h3 id="hardware-for-one-assembled-unit">7.3 Hardware for one assembled
+unit</h3>
+<ul>
+<li>2 × M5 × 25 bolts or thumbscrews and 2 × M5 nuts (end pivots)</li>
+<li>1 × 6-32 machine screw, ~3/8 in (arm lock)</li>
+<li>2 × rubber-coated magnets with M4 mounting</li>
+<li>2 × M4 washers (~12 mm OD, ~1 mm thick) plus matching M4 nuts or
+screws</li>
+</ul>
+<h2 id="future-deferred-parts">8. Future / deferred parts</h2>
+<p>The October design brief called for a board kit (<code>sled</code>,
+<code>front_cover</code>), a universal rear shell with SD door, a screw
+clamp foot and a glued-in magnet puck. Those are <strong>not</strong> in
+the 2026-11-04 kit. Keep them as optional follow-ons:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Deferred part</th>
+<th>Intent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Front cover + lens window</td>
+<td>Optics protection, LED baffles, button pins</td>
+</tr>
+<tr>
+<td>Edge sled</td>
+<td>Alternate retention for boards without post fit</td>
+</tr>
+<tr>
+<td>Screw clamp foot</td>
+<td>Shelf / extrusion clamp with printed or steel screw</td>
+</tr>
+<tr>
+<td>Embedded-magnet puck</td>
+<td>Slide-in Ø10 discs glued behind a thin skin</td>
+</tr>
+<tr>
+<td>Foot template</td>
+<td>Minimal <code>knuckle3</code> plate for community feet</td>
+</tr>
+</tbody>
+</table>
+<p>If revived, they must mate with the same W-Mount contract in section
+6 and must not break the current housing knuckle geometry.</p>
+<h2 id="assembly-minimum-kit">9. Assembly (minimum kit)</h2>
 <ol type="1">
-<li>Insert the microSD card into the board.</li>
-<li>Seat the camera module in the front-cover pocket and route the flex
-along its channel.</li>
-<li>Slide the PCB into the sled until the detent clicks.</li>
-<li>Drop the sled onto the rear-shell locating pins. Check the USB-C
-ports line up with their openings.</li>
-<li>Close the front cover onto the rear shell and fit 2 × M2 × 8
-screws.</li>
-<li>Press the nut into the foot’s <code>knuckle3</code>, join it to the
-camera’s <code>knuckle2</code>, and fit the M5 bolt.</li>
+<li>Test-fit housing and retainer; seat the PCB and retainer (section
+5.3).</li>
+<li>Fasten the magnets under the foot with washers and M4 hardware.</li>
+<li>Join foot <code>knuckle3</code> to male-rod <code>knuckle2</code>
+with an M5 bolt and nut.</li>
+<li>Form the 6-32 thread by hand in the empty female bore, back the
+screw out, insert the male spigot to full engagement, set roll, tighten
+lightly.</li>
+<li>Join female-rod <code>knuckle3</code> to housing
+<code>knuckle2</code> with the second M5 bolt.</li>
+<li>On vertical steel, orient the magnets to resist the arm’s tipping
+moment. Remove by peeling at the foot lip.</li>
 </ol>
-<p><strong>Hardware list:</strong> 2 × M2 × 8 self-tapping screws; 1 ×
-M5 × 25 bolt or thumbscrew; 1 × M5 nut; magnets per 7.2; optional M8 ×
-60 bolt and nut for the steel clamp variant; optional TPU pads.</p>
-<h2 id="acceptance-checks">9. Acceptance checks</h2>
+<p>Test the complete unit at full extension over a padded surface,
+including cable pull. Check slipping, sag, latch seating and finger
+roots. Do not force binding joints.</p>
+<h2 id="acceptance-checks">10. Acceptance checks</h2>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -909,71 +784,63 @@ M5 × 25 bolt or thumbscrew; 1 × M5 nut; magnets per 7.2; optional M8 ×
 <tr>
 <td>1</td>
 <td>Board fit</td>
-<td>Board slides in and out by hand. No PCB flex. USB-C plugs seat fully
-in both ports.</td>
+<td>PCB seats on posts; retainer latches; USB-C plugs seat; antenna
+clears opening</td>
 </tr>
 <tr>
 <td>2</td>
-<td>Optics</td>
-<td>No vignetting at 160° FOV, no LED glare in a dark-room capture, lens
-square to the window within 2°</td>
+<td>Ribbon / headers</td>
+<td>Camera flex and header pins clear the housing</td>
 </tr>
 <tr>
 <td>3</td>
-<td>SD access</td>
-<td>Card inserts and ejects with the case closed and the door open</td>
+<td>W-Mount</td>
+<td>Mates with printed arms/foot and a genuine GoPro buckle; holds tilt
+hand-tight</td>
 </tr>
 <tr>
 <td>4</td>
-<td>Buttons</td>
-<td>RST and BOOT can be pressed with the case closed</td>
+<td>Arm lock</td>
+<td>Spigot reaches min engagement; 6-32 holds roll without stripping on
+first sets</td>
 </tr>
 <tr>
 <td>5</td>
-<td>Thermal</td>
-<td>After 2 hours recording at 22 °C ambient, shell surface stays under
-45 °C and the camera keeps running</td>
+<td>Magnet</td>
+<td>Holds on vertical steel at full extension; peel lip works; PETG
+under washers uncrushed</td>
 </tr>
 <tr>
 <td>6</td>
-<td>W-Mount</td>
-<td>Mates with a genuine GoPro buckle and with the printed feet; holds a
-set tilt with the bolt hand-tight</td>
+<td>Printability</td>
+<td>Every kit part prints from the plate 3MF orientations in PETG at 0.2
+mm</td>
 </tr>
 <tr>
 <td>7</td>
-<td>Clamp</td>
-<td>Load check in 7.1</td>
+<td>Wi-Fi</td>
+<td>RSSI at 5 m is no worse than 6 dB below the bare board with the foot
+on steel</td>
 </tr>
 <tr>
 <td>8</td>
-<td>Magnet</td>
-<td>Holds on a vertical steel plate at the 60 mm cantilever; a 0.4 mm
-skin survives 50 attach and detach cycles</td>
-</tr>
-<tr>
-<td>9</td>
-<td>Printability</td>
-<td>Every part prints without supports in PETG at 0.2 mm, in the 3MF
-orientation</td>
-</tr>
-<tr>
-<td>10</td>
-<td>Wi-Fi</td>
-<td>RSSI at 5 m is no worse than 6 dB below the bare board, measured
-with the magnet puck on a steel plate</td>
+<td>Checksums</td>
+<td><code>python source/verify_release.py</code> passes for the frozen
+exports</td>
 </tr>
 </tbody>
 </table>
-<h2 id="open-questions-for-astra">10. Open questions for Astra</h2>
+<h2 id="open-questions">11. Open questions</h2>
 <ol type="1">
-<li>Confirm the TBV dimensions in section 3 from a physical board,
-especially the lens position, USB-C centers, button and LED positions,
-and SD insertion edge.</li>
-<li>If a camera flex is too short to put the lens where the front cover
-needs it, propose the lens position and we will standardize on it.</li>
-<li>Advise whether OpenSCAD or CadQuery gives the community the better
-parametric source for these shapes.</li>
+<li>Confirm remaining TBV board dimensions from a physical board,
+especially lens position, USB-C centers and antenna envelope vs the
+retainer opening.</li>
+<li>Validate long-term PETG creep on the arm lock and magnet washer
+stack.</li>
+<li>Decide whether a front cover is worth adding for dust and lens
+protection without blocking Wi-Fi or overheating.</li>
+<li>If a clamp foot returns, prefer M5 W-Mount compatibility over a
+one-off interface.</li>
 </ol>
 </body>
 </html>

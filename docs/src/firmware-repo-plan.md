@@ -1,279 +1,261 @@
 ---
-title: "Gizmonic Cambot: open-source software repository plan"
-subtitle: "On-board firmware, agent, API and CLI for the ESP32-S3 camera"
+title: "Gizmonic Cambot: software architecture"
+subtitle: "Firmware, host libraries, registrar, API and remaining work"
 author: "Gizmonic Cambot project · Apache-2.0"
-date: "Plan rev A · October 2026"
+date: "Plan rev B · November 2026"
 ---
 
 ## 1. Goals
 
 - Record continuously to microSD in a rolling buffer, and never lose recording
   because of indexing, queries or network trouble.
-- Build a semantic index of activity with a cloud (or LAN) vision model, within a
-  hard daily budget.
-- Answer natural-language questions on the device, through a tool-calling agent,
-  and expose the same tools through REST and MCP.
-- Set up from a fresh board to a camera on the network in under ten minutes,
-  driven by a person or by a coding agent.
-- Support more than one camera board through board-support packages.
+- Build a semantic index of activity on the device with cloud (or LAN) vision
+  models, within a hard daily budget.
+- Answer natural-language questions from a LAN host that keeps an index
+  history, and expose search/inspect tools on the camera through REST and MCP.
+- Set up from a fresh board to a camera on the network by following
+  `fixr/SETUP.md`, driven by a person or by a coding agent.
+- Support more than one camera board through board-support packages (today:
+  FORIOT pin map from the Lloyd reference).
 
 **Non-goals for v1:** audio, H.264, cloud video storage, face recognition,
 exposure to the public internet, enterprise Wi-Fi.
 
-## 2. Repository layout
+## 2. Repository layout (as built)
 
-One monorepo, `gizmonic-cambot`, so firmware, CLI, docs and CAD release together.
+One monorepo, `gizmonic-cambot`. Firmware, host tests, registrar, docs and CAD
+live together. Names below match the tree today; aspirational folders from the
+October plan that are not present are listed in section 12.
 
 ```text
 gizmonic-cambot/
-├── README.md              what it is, photos, quick start
-├── AGENTS.md              rules and entry points for coding agents
-├── fixr/                  setup guide, per-computer profiles, registrar
+├── README.md
+├── AGENTS.md
+├── pyproject.toml         host test package `cambot-host`
+├── assets/                README artwork
+├── fixr/
 │   ├── SETUP.md           agent-readable setup guide (canonical)
-│   └── profiles/          one JSON spec and one note per computer
-├── LICENSE                Apache-2.0 (software); hardware/ and docs/ carry their own
-├── firmware/              ESP-IDF 5.x project
-│   ├── main/              app_main: task startup, watchdogs
-│   ├── components/
-│   │   ├── board/         BSPs: foriot_s3cam (default), freenove_s3, ...
-│   │   ├── capture/       esp32-camera setup, frame pacing, sensor tuning
-│   │   ├── recorder/      segment writer, frame index, ring-buffer eviction
-│   │   ├── activity/      1/8-scale JPEG decode, motion score
-│   │   ├── indexer/       keyframe policy, caption queue, JSONL index, events
-│   │   ├── llm/           provider adapters, budget, retries
-│   │   ├── agent/         tool registry, tool-calling loop
-│   │   ├── api/           REST handlers, MJPEG and AVI streaming, auth
-│   │   ├── mcp/           MCP server (Streamable HTTP, JSON-RPC 2.0)
-│   │   ├── provisioning/  Improv serial, SoftAP portal, NVS config
-│   │   ├── timebase/      SNTP, time zone, unsynced-segment repair
-│   │   ├── marks/         robot marks over HTTP and trigger input
-│   │   └── ota/           HTTPS OTA with rollback
-│   ├── webui/             small static UI (Preact), packed into LittleFS
-│   ├── partitions.csv
-│   └── sdkconfig.defaults[.board]
-├── cli/                   Python package `cambot-cli` (command `cambot`)
-├── hardware/              CAD source, STEP, STL and 3MF from Astra; PARTS.md
-├── docs/                  white paper, API (OpenAPI 3.1), index format, MCP tools
-├── flasher/               ESP Web Tools page and manifest (GitHub Pages)
+│   ├── README.md
+│   ├── profiles/          per-computer JSON + notes (e.g. waterbear)
+│   ├── schema/            host-profile and camera-registration schemas
+│   └── registrar/         LAN web UI, ask, index.sqlite sync
+├── firmware/              ESP-IDF 5.x project (`cambot_bringup`)
+│   ├── main/              bring-up: Wi-Fi, HTTP, register, secrets.h
+│   └── components/
+│       ├── recorder/      capture loop, segments, HTTP, MCP, indexer task
+│       ├── index/         motion, keyframe, grayscale helpers
+│       ├── llm/           OpenAI, Anthropic, JEV body builders + HTTP
+│       ├── store/         frame index (idx) helpers
+│       └── timebase/      SNTP / sync flags
+├── host/
+│   ├── cambot_store/      card format, time queries, HTTP client helpers
+│   ├── cambot_index/      host-side indexer contract (ported on-device)
+│   ├── cambot_models/     OpenAI, Anthropic, JEV adapters
+│   └── cambot_mcp/        MCP tool definitions shared with tests
+├── hardware/
+│   └── cambot-minimum-petg-kit/   PETG case + arms + magnet foot
+├── docs/                  white paper, this plan, mechanical spec, build.sh
 ├── test/
-│   ├── host/              recorder, index and agent logic built for Linux
-│   ├── hil/               hardware-in-the-loop smoke test
-│   └── eval/              labeled robot sessions for search-quality scoring
-└── .github/workflows/     build per board, host tests, release, Pages
+│   ├── host/              Python + C unit tests
+│   └── hil/               hardware-in-the-loop helpers
+└── reference/from-lloyd-barbot/   board bring-up this firmware grew from
 ```
 
 **Why ESP-IDF rather than Arduino.** The Lloyd prototype used Arduino, which
-was fine for one endpoint. Cambot needs explicit task priorities and core
-pinning, the IDF HTTP server with several concurrent sockets, the SDMMC and FATFS
-tuning knobs, HTTPS OTA with rollback, and NVS encryption. The prototype's
-working camera settings (pin map, `CAMERA_GRAB_LATEST`, OV3660 white-balance
-warm-up) carry over directly. PlatformIO stays as an optional build entry point
-for contributors who already use it.
+was fine for one endpoint. Cambot needs FreeRTOS task priorities, the IDF HTTP
+server with several concurrent sockets, SDMMC/FATFS tuning and room for OTA
+later. The prototype's working camera settings (pin map, `CAMERA_GRAB_LATEST`,
+OV3660 warm-up) carry over. PlatformIO is optional and unused in the current
+path.
 
 ## 3. Runtime architecture
 
-| Task | Core | Priority | Job |
-|---|---|---|---|
-| `capture` | 1 | High | Gets frames at the configured rate and pushes them to a PSRAM ring of frame pointers |
-| `recorder` | 1 | High | Writes frames to the current segment in 64 KB chunks, appends the frame index, rotates every 60 s, evicts the oldest segments |
-| `activity` | 0 | Medium | Decodes every Nth frame at 1/8 scale to grayscale, scores motion against a running background |
-| `indexer` | 0 | Low | Picks keyframes, calls the model, writes index records and events |
-| `httpd` | 0 | Medium | REST, MCP, live MJPEG, clip streaming |
-| `agent` | 0 | Low | One `/ask` at a time; queues others |
+| Task / role | Core | Job |
+|---|---|---|
+| `recorder` | Prefer 1 | Grab VGA JPEG, copy to PSRAM, append segment + idx, eviction |
+| `indexer` | Prefer 0 | Motion score, keyframe policy, GPT/JEV calls, JSONL index/events |
+| `httpd` | 0 (with Wi-Fi) | REST, MCP, frame and clip serving |
+| Registrar (host) | — | Live UI, noul editor, ask, SQLite index history, perf/dev switches |
 
-**Rule:** the recorder never waits on anything below it. If the SD card stalls,
-capture drops frames and counts them. If the indexer falls behind, keyframes are
-dropped by priority (watch-list candidates last).
+**Rule:** the recorder never waits on the model. If the SD card stalls, capture
+drops frames and counts them. If the indexer falls behind, keyframes are
+dropped. HTTPS to OpenAI or TypeSafe must not hold the camera mutex.
 
-**Memory budget (8 MB PSRAM):** camera buffers ~0.4 MB, frame ring ~1.5 MB,
-SD write buffers 0.25 MB, model request and response buffers ~0.5 MB, agent
-context 0.25 MB, plus mbedTLS allocations moved to PSRAM.
+**Defaults today:** `FRAMESIZE_VGA`, `capture_ms = 200` (~5 fps). High
+performance mode keeps that pace, flushes the card less often and tells the
+registrar to poll the live frame every 0.5 s. Flag file:
+`/sdcard/cambot/high_perf`.
 
-**Flash (16 MB):** two 4 MB OTA app slots, 2 MB LittleFS (web UI), NVS (64 KB,
-encrypted when enabled), core dump (64 KB).
+**Memory:** 8 MB PSRAM holds camera buffers, JPEG copies for indexing and HTTP
+bodies. **Flash:** single bring-up app image for now; dual OTA slots remain
+planned.
 
 ## 4. Storage format on the SD card
 
-Documented in `docs/storage-format.md` and versioned, so other tools can read a
-card directly.
+Root: `/sdcard/cambot` (`CAMBOT_ROOT`). Host libraries and on-device code share
+the same layout ideas; the camera is authoritative for what is on the card.
 
 ```text
-/cambot/
-  card.json                         card id, format version, camera id
-  rec/2026-10-29/19/
-    2026-10-29T19-04-00Z.mjpg       concatenated JPEG frames, 60 s
-    2026-10-29T19-04-00Z.idx        binary: u64 t_ms_utc, u32 offset, u32 len, u16 motion
-  index/2026-10-29/19.jsonl         one keyframe record per line
-  events/2026-10-29.jsonl           merged events with start and end
-  marks/2026-10-29.jsonl            robot marks
-  vec/2026-10-29/19.vec             optional int8 caption embeddings (phase 2)
+/sdcard/cambot/
+  rec/YYYY-MM-DD/HH/
+    YYYY-MM-DDTHH-MM-SSZ.mjpg     concatenated JPEG frames, ~60 s
+    YYYY-MM-DDTHH-MM-SSZ.idx      binary frame index (incl. motion milli)
+  index/YYYY-MM-DD/HH.jsonl       one keyframe record per line
+  events/YYYY-MM-DD.jsonl         merged events
+  nouls.json                      JEV questions (+ legacy watch.json read)
+  nouls/<name>/…                  example JPEGs (≤ 80 KB each)
+  high_perf                       present / content selects perf mode
 ```
 
-**Index record:**
+**Index record (representative):** caption, objects, actions, robot state,
+motion, segment id, optional JEV `watch` map, optional boxes and alert
+metadata. Exact fields follow the host indexer contract in
+`host/cambot_index/pipeline.py` and the on-device writer in
+`firmware/components/recorder/indexer.c`.
 
-```json
-{"t":"2026-10-29T19:07:41.200Z","seg":"2026-10-29T19-07-00Z","frame":206,
- "motion":0.41,"caption":"Pipette head lowers onto tip rack column 3",
- "objects":["pipette head","tip rack"],"actions":["tip pickup"],
- "robot_state":"moving","watch":{"tip pickup":0.92,"person in frame":0.02},
- "model":"<provider>/<model>","verified":false}
-```
+**Eviction:** when free space is low, delete the oldest hour under `rec/`.
+Recording continues if indexing is paused by budget or by the registrar's Dev
+mode.
 
-**Eviction:** when free space drops below `storage.reserve_pct` (default 10%),
-delete the oldest hour directory under `rec/`. Delete its `index/` and `vec/`
-files only once they are older than `storage.index_keep_days` (default 30).
-Index text is tiny, so a camera can still answer "what happened last week"
-from captions after that week's video is gone.
+**Card:** FAT32, high-endurance recommended. Mount in 1-bit SDMMC on CLK 39,
+CMD 38, D0 40 (FORIOT map from the Lloyd pins header).
 
-**Card:** FAT32, 8–128 GB, high-endurance cards recommended. Mount in 1-bit
-SDMMC mode on CLK 39, CMD 38, D0 40. Call `setPins` before `begin` to avoid the
-PSRAM pin overlap.
+## 5. Indexing pipeline (on device)
 
-## 5. Indexing pipeline
+1. **Motion.** Grayscale, shrink, mean absolute change → 0..1 stored as
+   thousandths in the frame index.
+2. **Keyframe.** First frame; then every ~3 s while motion stays above
+   threshold; else every ~60 s.
+3. **GPT** (optional). Caption keyframe with `gpt-4.1-mini` into structured
+   JSON.
+4. **JEV** (optional). One System One request per keyframe with live frame,
+   noul list, examples, optional box question. Camera calls TypeSafe; the
+   registrar does not.
+5. **Persist.** Append JSONL under `index/`; merge events; keep a RAM recent
+   window for MCP `search_index` / ask sync.
+6. **Budget.** Daily frame budget pauses the indexer only.
 
-1. **Activity.** A motion score from 0 to 1 per sampled frame.
-2. **Keyframe policy.** One idle keyframe every `index.idle_s` (60 s). While
-   motion stays above `index.motion_threshold`, one keyframe every
-   `index.active_s` (3 s). Always take a keyframe at a robot mark.
-3. **Batching.** Up to four keyframes per request, each labeled with its
-   timestamp, to cut per-request overhead.
-4. **Prompt.** A system prompt plus the user's scene profile and watch list. The
-   response must follow a JSON schema; invalid JSON is retried once and then
-   dropped.
-5. **Events.** Consecutive records sharing an action, or a watch-list hit
-   above `watch.threshold`, are merged into events with start and end times.
-6. **Budget.** `budget.frames_per_day` and `budget.tokens_per_day` are hard caps.
-   When a cap is reached, indexing pauses and `/status` reports it. Recording
-   continues.
+Nouls are yes/no questions with up to four example images, optional box
+geometry when score ≥ 0.5, optional colors for registrar overlay, and optional
+HTTPS webhooks that fire on edge into yes or no. Managed via
+`GET`/`PUT /api/v1/nouls` and example routes under `/api/v1/nouls/...`.
 
 ## 6. Model adapters
 
-| Adapter | Covers |
-|---|---|
-| `openai_compatible` (default) | Chat Completions with tools and base64 images. Works with OpenAI, OpenRouter, Gemini's OpenAI-compatible endpoint, vLLM, Ollama and LM Studio on the LAN. |
-| `anthropic` | Messages API with tools and images |
-
-Configuration: `model.base_url`, `model.name`, `model.api_key` (write-only),
-`model.vision` (bool), `model.max_tokens`. The repo keeps a **tested models**
-table in `docs/models.md` rather than hard-coding model names. TLS uses the IDF
-certificate bundle; `model.ca_pem` overrides it for private servers.
-
-## 7. Agent and tools
-
-The on-board agent loop: send the question with the tool list, run the tool
-calls the model requests, return results, and repeat. It stops after
-`agent.max_steps` (8) or when `agent.max_frames` (48) images have been sent. The
-final answer must cite moments as `{start, end, confidence, thumb_url, clip_url}`.
-
-| Tool | Images? | Purpose |
+| Adapter | Where | Notes |
 |---|---|---|
-| `get_status` | No | Time, sync state, storage, budget, recording state |
-| `list_recordings(from, to)` | No | Which minutes exist |
-| `search_index(from, to, query, k)` | No | Keyword, watch-list, mark and optional vector search over records and events |
-| `get_marks(from, to, label?)` | No | Robot marks |
-| `inspect_window(t, before_s, after_s, n)` | Yes | Sends `n` frames around `t` to the model |
-| `scan(from, to, every_s)` | Yes | Bounded sampling when the index has no hits; reports cost first |
-| `make_clip(from, to)` | No | Returns clip URLs (MJPEG stream and AVI download) |
-| `get_live_frame` | Yes | Current view |
-| `set_watchlist(items)` / `set_profile(text)` | No | Configuration, behind an admin scope |
+| OpenAI-compatible | Firmware `llm` + `host/cambot_models` | Captions / ask |
+| Anthropic | Firmware + host | Messages API path exists |
+| JEV / TypeSafe | Firmware + host | Noul scoring on camera |
 
-The MCP server exposes these same tools, except that `inspect_window` and `scan`
-return image content to the calling agent instead of calling the on-board model.
-An external agent such as Cursor can then use its own model and spend nothing on
-the camera's budget.
+Bring-up keys are compile-time: `CAMBOT_MODEL_KEY`, `CAMBOT_JEV_KEY` in
+`secrets.h` (gitignored; see `secrets.h.example`). Registrar ask uses
+`CAMBOT_MODEL_KEY` from the environment or `fixr/run/secrets.env`.
 
-## 8. HTTP API (v1)
+## 7. MCP tools (on camera)
 
-All endpoints except `/api/v1/ping` require `Authorization: Bearer <token>`.
-The full OpenAPI 3.1 document lives in `docs/api.yaml`.
+`POST /mcp` speaks Streamable HTTP / JSON-RPC. Tools implemented on device:
+
+| Tool | Purpose |
+|---|---|
+| `get_status` | Camera / storage snapshot |
+| `list_recordings` | Minutes that exist in a range |
+| `search_index` | Search the **RAM recent** index window |
+| `read_index_page` | Page deeper history from the card |
+| `inspect_window` | Return frame image content around a time |
+| `make_clip` | Clip URL (`clip.mjpg`) |
+| `get_live_frame` | Current JPEG |
+
+Host package `host/cambot_mcp` mirrors the tool list for tests. Full on-board
+agent loop and `POST /api/v1/ask` are still planned; today **ask** runs in
+`fixr/registrar/serve.py` against SQLite history synced from the camera.
+
+## 8. HTTP API (v1, as implemented)
+
+Auth: `Authorization: Bearer <CAMBOT_CAMERA_PASSWORD>` on protected routes.
+`GET /api/v1/ping` and registration remain the discovery/setup surface.
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/v1/ping` | `{"ok":true,"id":"cambot-ab12","fw":"0.3.0"}` (no auth; used by discovery) |
-| `GET /api/v1/status` | Wi-Fi, time sync, SD, recording, budget, version |
-| `GET /api/v1/frame.jpg` | Current frame |
-| `GET /api/v1/stream` | Live MJPEG (multipart) |
-| `GET /api/v1/recordings?from&to` | Minute list with frame counts |
-| `GET /api/v1/frames?from&to&every_s` | JSON list of frame URLs |
-| `GET /api/v1/frame/{t}.jpg` | The recorded frame nearest to `t` |
-| `GET /api/v1/clip.mjpg?from&to&speed` | Replays a recorded window as MJPEG (plays in an `<img>`) |
-| `GET /api/v1/clip.avi?from&to` | MJPEG AVI, muxed on the fly from the frame index |
-| `GET /api/v1/index?from&to&q` | Matching index records |
-| `GET /api/v1/events?from&to&since_id` | Events (poll for alerts) |
-| `POST /api/v1/marks` | `{"label":"step 12: pick tip","t?":...}` |
-| `POST /api/v1/ask` | `{"question":"..."}` → answer with cited moments |
-| `GET`/`PATCH /api/v1/config` | Settings; secrets are write-only |
-| `POST /api/v1/ota` | Firmware URL or upload (admin) |
-| `POST /mcp` | MCP Streamable HTTP endpoint |
+| `GET /api/v1/ping` | Liveness / id |
+| `GET /api/v1/frame.jpg` | Live JPEG |
+| `GET /api/v1/status` | Wi-Fi, time, SD, recording, perf, indexing flags |
+| `GET /api/v1/recordings?from&to` | Segment list |
+| `GET /api/v1/frame/{t}.jpg` | Recorded frame nearest to `t` |
+| `GET /api/v1/clip.mjpg?from&to` | Replay window as MJPEG |
+| `GET /api/v1/index/latest` | Newest index record (registrar caption card) |
+| `GET`/`POST /api/v1/indexing` | GPT indexing switch |
+| `GET`/`POST /api/v1/jev` | JEV indexing switch |
+| `GET`/`PUT /api/v1/nouls` | Noul configuration |
+| `GET`/`PUT /api/v1/nouls/.../examples/...` | Example JPEGs |
+| `GET`/`POST /api/v1/perf` | High performance mode |
+| `POST /mcp` | MCP endpoint |
+| `POST /api/register` | Registrar registration (from camera) |
 
-Times are accepted as RFC 3339, as local wall time (`12:00`, interpreted in
-`time.tz` for today), or as relative times (`-30m`).
+**Not implemented yet** (still in the October wishlist): live MJPEG stream
+URL, `clip.avi`, `POST /api/v1/ask`, `POST /api/v1/marks`, `GET /api/v1/events`
+poll, `GET`/`PATCH /api/v1/config`, `POST /api/v1/ota`, mDNS
+`_cambot._tcp`, SoftAP / Improv provisioning.
 
-## 9. Provisioning and configuration
+## 9. Provisioning and configuration (today)
 
-- **Serial (default, agent-friendly).** The firmware speaks the open **Improv
-  Wi-Fi serial** protocol on the TTL UART at 115200, plus a line-based JSON
-  console (`{"cmd":"wifi.set",...}`) for everything else. `cambot provision`
-  wraps both.
-- **Browser flasher.** ESP Web Tools on GitHub Pages flashes the board and runs
-  Improv in Chrome or Edge, with no installs.
-- **SoftAP fallback.** With no stored network, or after holding BOOT for 5 s,
-  the camera opens `Cambot-Setup-AB12` with a portal at `192.168.4.1`.
-- **Identity.** The hostname `cambot-<last 4 hex of MAC>` is advertised over
-  mDNS as `_http._tcp` and `_cambot._tcp`, with TXT `id`, `fw` and `board`.
-- **Token.** Generated at first provisioning and returned once over serial to
-  the CLI, which stores it in the OS keychain. It can be rotated with
-  `cambot token rotate`.
+- **Compile-time secrets.** Copy `firmware/main/secrets.h.example` to
+  `secrets.h`. Fill SSID, Wi-Fi password, camera password, registrar URL and
+  model keys. Never commit the copy.
+- **Flash.** ESP-IDF 5.x on the TTL UART (CH340) at 115200. Physical BOOT/RST
+  steps are in `fixr/SETUP.md`.
+- **Join and register.** Firmware joins the 2.4 GHz network, serves HTTP, and
+  POSTs `/api/register` to the registrar on a timer.
+- **Host secrets.** `CAMBOT_CAMERA_PASSWORD`, `CAMBOT_WIFI_PASSWORD`,
+  `CAMBOT_MODEL_KEY` via environment or `fixr/run/secrets.env`.
 
-Log lines use the `key=value` style from the prototype (`wifi=ip=...`,
-`sd=ok size_gb=29.7`, `time=synced`) so people and agents can grep them.
+Planned replacements: Improv serial, SoftAP portal, NVS-backed config, token
+rotation via a `cambot` CLI, browser flasher.
 
-## 10. `cambot` CLI (Python)
+## 10. Registrar (LAN host)
 
-| Command | Does |
-|---|---|
-| `cambot doctor` | Checks Python, esptool, ports, drivers and ffmpeg, then prints fixes |
-| `cambot ports` | Lists serial ports and labels them TTL (CH340, VID 1a86) or OTG (VID 303a) |
-| `cambot flash [--port] [--board]` | Downloads the release, then runs esptool at 115200 on TTL |
-| `cambot provision --ssid` | Improv Wi-Fi. The password comes from `CAMBOT_WIFI_PASSWORD` or a hidden prompt. Saves the token. |
-| `cambot discover` | Finds cameras over mDNS, then checks each with `/ping` |
-| `cambot status/ask/pull/export` | API wrappers; `export` produces MP4 with ffmpeg |
-| `cambot config set/get` | Config. `-` reads a secret from stdin. |
-| `cambot mcp-config` | Prints a ready `.cursor/mcp.json` entry |
-| `cambot logs` | Tails the TTL serial log |
+`fixr/registrar/serve.py` is the human UI and the ask path:
 
-## 11. Testing and CI
+- Lists registered cameras; proxies `frame.jpg` and `index/latest` with the
+  bearer token (never printed).
+- Edits nouls and example images; toggles GPT indexing, JEV indexing, High
+  performance and Dev mode (idle → turn indexing off).
+- Draws noul boxes on the live image; charts recent scores.
+- Syncs index lines into `fixr/run/index.sqlite` and answers questions with
+  gpt-4.1-mini from that history so the camera stays reachable.
 
-- **Host tests (CI):** ring-buffer eviction, index merge, query parsing, AVI
-  muxing and agent loop logic against a mocked model. These are built with the
-  IDF `linux` target or plain CMake.
-- **Firmware builds (CI):** one job per board BSP. Release artifacts are a merged
-  factory binary, an OTA binary, the web flasher manifest and checksums.
-- **Hardware-in-the-loop (HIL, manual or self-hosted runner):**
-  `test/hil/smoke.py` flashes, provisions, waits for `time=synced`, records two
-  minutes, then checks the frame index, clip export and `/ask` on a mocked
-  model.
-- **Search evaluation:** `test/eval/` holds recorded robot sessions with
-  human-labeled events (tip pickup, drop, pour). Each release reports recall and
-  timing error for the standard questions.
+HIL helpers: `test/hil/jev_watch.py`, `perf_check.py`, `record_check.py`.
+
+## 11. Testing
+
+- **Host tests:** `pytest` over `host/cambot_*` and registrar UX
+  (`test/test_registrar_ux.py`, model adapters, store/index/mcp).
+- **C helpers:** motion, idx and LLM body builders under `test/host/c/`.
+- **HIL:** manual scripts against a flashed board and a running registrar.
+- **CI / eval / web flasher:** not wired yet.
 
 ## 12. Milestones
 
-| Milestone | Scope | Exit criterion |
+| Milestone | Scope | Status |
 |---|---|---|
-| M0 | IDF skeleton, FORIOT BSP, camera, SD mount | Frames on SD with a valid index |
-| M1 | Recorder, eviction, REST, live view, clips | 24 h soak with no dropped segments and eviction working |
-| M2 | Improv, SoftAP, CLI, web flasher, SETUP.md | A fresh board reaches the network by following SETUP.md, with an agent driving |
-| M3 | Activity, indexer, watch list, marks, search | Eval recall ≥ 0.8 on tip-pickup sessions at default budget |
-| M4 | Agent `/ask`, MCP server | The headline question answered correctly with clips from Cursor via MCP |
-| M5 | OTA with rollback, encrypted builds, second BSP | OTA tested on both boards |
-| Later | Embeddings, multi-camera hub | |
+| M0 | IDF project, FORIOT pins, camera, SD | **Done** |
+| M1 | Recorder, eviction, REST frame/status/recordings/clips | **Done** |
+| M2 | Improv, SoftAP, `cambot` CLI, web flasher | **Not started** |
+| M3 | Motion, on-device GPT + JEV, nouls, registrar live UI | **Done** |
+| M4a | MCP on camera; registrar ask + SQLite history | **Done** |
+| M4b | On-board `/ask`, marks, richer index/events HTTP | Planned |
+| M5 | OTA rollback, encrypted builds, second BSP | Planned |
+| Later | Embeddings, multi-camera hub | Planned |
 
 ## 13. Contributor rules (`AGENTS.md` summary)
 
-- Never commit secrets. `firmware/main/secrets.h` and `.env` are gitignored;
-  examples ship as `*.example`.
-- Keep the storage format and API versioned. Breaking changes bump `v1` to `v2`.
-- Every new board adds a BSP and a board-kit CAD folder together.
-- Recording comes before everything else. A pull request that can block the
-  recorder task is rejected.
+- Never commit secrets. `firmware/main/secrets.h`, `.env`, API key files and
+  `fixr/run/` stay gitignored.
+- Prefer environment variables or hidden prompts for Wi-Fi password, camera
+  password and model keys. Never print them.
+- Recording comes before everything else. A change that blocks the recorder
+  task is rejected.
+- Printable kit changes go through the generators, exports and
+  `manifest.json` together.
+- Ask before formatting an SD card, erasing flash or rotating a token.
+- Until M2 ships, do not invent `cambot` CLI commands; follow `fixr/SETUP.md`.

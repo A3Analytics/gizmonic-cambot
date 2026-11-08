@@ -2,7 +2,7 @@
 title: "Gizmonic Cambot: an open, $20 camera that remembers what your robots did"
 subtitle: "White paper · semantically indexed video for AI monitoring of robots and lab equipment"
 author: "Gizmonic Cambot · open hardware and open source"
-date: "Draft 0.1 · October 2026"
+date: "Draft 0.2 · November 2026"
 ---
 
 ## Summary
@@ -14,19 +14,21 @@ through hours of footage to find the four seconds that matter.
 
 **Gizmonic Cambot** is an open-source camera built from a roughly $12 ESP32-S3 camera
 board, a microSD card and a 3D-printed case. It records continuously into a
-rolling buffer on the card, uses a cloud vision model to build a searchable
-index of what happened, and answers questions in plain language:
+rolling buffer on the card, uses cloud vision models on the device to build a
+searchable index of what happened, and answers questions in plain language from
+a LAN registrar on a nearby computer:
 
 > "Show me between 12:00 and 12:30 where the machine picks up a pipette tip."
 
-The camera replies with the matching moments, a confidence for each, thumbnails
-and short clips served straight from its SD card. The same functions are
-available as a REST API and as an MCP server, so a coding agent such as Cursor,
-or the robot's own controller, can query the camera directly.
+The camera serves live frames, recordings, clips, its index and an MCP tool
+surface over HTTP. A small registrar on the LAN shows the live view, keeps a
+local copy of the index, and runs the ask loop so the camera stays free to
+record. The same camera tools are available to a coding agent such as Cursor
+through MCP.
 
 The hardware, case, mounts, firmware and documentation are all open. The case
-uses a modular mount so the camera can be clamped, stuck magnetically to steel,
-or attached with any foot a user designs.
+uses a GoPro-style **W-Mount** so the camera can hang from modular arms ending
+in a dual-magnet foot, or any other W-Mount accessory.
 
 ## The problem
 
@@ -47,23 +49,25 @@ things make visual monitoring of them harder than it should be:
 
 Cambot is designed to be cheap enough to leave on every machine:
 
-- **Records everything locally.** About 5 frames per second at 800×600 by
-  default, stored as one-minute segments with a per-frame time index. When the
-  card fills, the oldest segments are deleted first. Nothing leaves the camera
-  unless the indexer or a query sends it.
+- **Records everything locally.** About five VGA JPEGs per second by default
+  (640×480, 200 ms pacing), stored as one-minute segments with a per-frame time
+  index. When the card fills, the oldest hour of video is deleted first.
+  Nothing leaves the camera unless indexing or a query sends it.
 - **Indexes only what matters.** An on-board activity detector scores motion
-  on every frame. Keyframes are sent for captioning only when something is
-  happening, plus one idle keyframe a minute, so an empty room costs almost
-  nothing.
-- **Answers questions.** An on-board agent runs a tool-calling loop against a
-  cloud vision model. The model plans the search, the camera does the cheap
-  text search locally, and the model checks only a few candidate windows
-  frame by frame.
-- **Speaks to agents.** Every capability is a documented REST endpoint and an
-  MCP tool, so Cursor or any MCP-capable agent can pull clips, ask questions
-  and set up watch lists without custom glue code.
+  on every frame. Keyframes go to a vision model when something is happening,
+  plus one idle keyframe a minute, so an empty room costs almost nothing.
+- **Two index paths.** GPT captioning writes structured captions, objects and
+  actions. JEV (TypeSafe) scores named **nouls**—yes/no watch questions with
+  optional example images, bounding boxes and webhook alerts. Either path can
+  run alone.
+- **Answers questions off-camera.** The LAN registrar syncs index history into
+  SQLite and asks gpt-4.1-mini against that copy, so a long question does not
+  stall recording. The camera still exposes MCP tools for agents that want to
+  search and inspect frames themselves.
+- **Speaks to agents.** REST `/api/v1/...` and MCP `/mcp` share the same
+  capabilities: status, recordings, index search, clips and live frames.
 
-![System architecture. Everything left of the cloud runs on the ESP32-S3; the model is only called for captions, verification and planning.](fig/architecture.svg)
+![System architecture. Capture, record and index run on the ESP32-S3; ask and the live UI run on the LAN registrar.](fig/architecture.svg)
 
 ## How it works
 
@@ -71,86 +75,82 @@ Cambot is designed to be cheap enough to leave on every machine:
 
 The OV3660 sensor produces JPEG frames directly, so the ESP32-S3 never encodes
 video. The recorder appends frames to a one-minute segment file and writes a
-small index of each frame's timestamp, offset and length. Timestamps come from
-network time (SNTP) and are stored in UTC; queries are interpreted in the
-camera's configured time zone.
+small index of each frame's timestamp, offset, length and motion score.
+Timestamps come from network time (SNTP) and are stored in UTC. Default
+capture is **VGA at ~5 fps**. A **High performance** flag on the card (and in
+the registrar UI) keeps that rate while flushing the card less often and
+refreshing the live preview every 0.5 s.
 
-| Mode | Resolution | Rate | Approx. data rate | 32 GB card holds |
-|---|---|---|---|---|
-| Default | 800×600 | 5 fps | ~0.7 GB/hour | ~1.5 days |
-| Detail | 1280×720 | 5 fps | ~1.4 GB/hour | ~18 hours |
-| Smooth | 800×600 | 10 fps | ~1.4 GB/hour | ~18 hours |
-| Timelapse | 1600×1200 | 1 fps | ~0.4 GB/hour | ~3 days |
+| Mode | Resolution | Rate | Notes |
+|---|---|---|---|
+| Default | 640×480 (VGA) | ~5 fps | Chosen so TypeSafe image sides stay ≥ 280 px |
+| High performance | 640×480 | ~5 fps | Faster preview; lighter SD flush |
 
-These figures assume typical JPEG sizes at quality 12 and keep 10% of the card
-free. Busy, detailed scenes produce larger frames.
+Higher resolutions and rate tables from the original design brief remain
+aspirational. Busy, detailed scenes produce larger JPEGs and fill the card
+faster.
 
 ### The semantic index
 
-Each keyframe the indexer selects is sent to the vision model with a short
-**scene profile** written by the user ("This camera watches an Opentrons OT-2
-liquid handler. Tip racks are on the left, plates are in the middle.") and an
-optional **watch list** of named events ("tip pickup", "tip eject", "gripper
-open", "person in frame"). The model returns structured JSON: a caption, the
-objects and actions it sees, the robot state, and a yes/no with confidence for
-each watch-list item.
+Each keyframe the on-device indexer selects can be sent to:
 
-The camera stores these records on the SD card in hourly files next to the
-video. Consecutive keyframes that share an action are merged into **events**
-with a start and end time. An optional phase-2 feature adds small text
-embeddings for each caption, quantized to a few hundred bytes, so the camera can
-rank by meaning as well as by keyword.
+- **GPT** (`gpt-4.1-mini` today) with a short scene profile, returning caption,
+  objects, actions and robot state.
+- **JEV** with the camera's noul list. Each noul is a yes/no question; optional
+  example JPEGs, a box question and an HTTPS alert webhook travel with it.
 
-**Robot marks** make the index far more precise. A robot controller can call
-`POST /api/v1/marks` (or pulse an optional trigger input) with a label such as
-`step 12: pick tip`. Marks are stored on the same timeline as the video, so the
-camera can answer "show me every step 12" exactly, and compare what the robot
-claimed to do with what the camera saw.
+Records land under `/sdcard/cambot/index/` as hourly JSONL. Consecutive
+keyframes that share an action merge into **events**. Nouls live in
+`nouls.json` (plus example JPEGs under `nouls/<name>/`). GPT and JEV indexing
+are separate switches (`/api/v1/indexing`, `/api/v1/jev`).
+
+**Robot marks** (`POST /api/v1/marks`) remain planned. Controllers will be able
+to stamp the timeline with labels such as `step 12: pick tip` so the camera can
+answer those queries exactly.
 
 ### Answering a question
 
-![How a question becomes an answer. Only step 3 sends images to the model.](fig/query-flow.svg)
+![How a question becomes an answer. Only frame inspection sends images to the model.](fig/query-flow.svg)
 
-1. **Plan.** The question goes to the cloud model along with a list of the
-   camera's tools. The model turns "between 12 and 12:30" into a time range and
-   "picks up a pipette tip" into a search.
-2. **Search.** The camera searches its own index (captions, tags, watch-list
-   hits, marks and optional embeddings) and returns ranked candidates as text.
-3. **Verify.** For the best candidates the camera pulls frames from the SD
-   card, a few seconds either side, and the model confirms the event and
-   narrows its start and end. This also catches events that fell between
-   keyframes.
-4. **Answer.** The response lists moments with confidence, thumbnails and clip
-   URLs. Verified results are written back to the index so the next similar
-   question is answered from text alone.
+Today the ask path runs on the **registrar**:
 
-If the index has nothing useful, for example a question about something nobody
-put on the watch list, the agent can **scan** the window by sampling frames at
-a fixed interval. Scans are capped by a per-question frame budget, and the agent
-reports the estimated cost first when a scan would exceed it.
+1. **Sync.** The registrar pulls recent index lines from the camera (including
+   JEV watch scores) into a local SQLite history so questions can cover days
+   without hammering the ESP32.
+2. **Search.** gpt-4.1-mini reads that history for the time range in the
+   question.
+3. **Inspect (optional).** Agents using MCP on the camera can still call
+   `inspect_window` / `make_clip` to pull frames or an MJPEG clip from the
+   card when the text index is not enough.
+4. **Answer.** The registrar returns moments with the supporting index text.
+   Clip URLs point at the camera.
+
+An on-board `/ask` agent that owns the full tool-calling loop on the ESP32 is
+still on the roadmap. Until then, MCP on the camera and ask on the registrar
+cover the same jobs for people and for coding agents.
 
 ### Interfaces
 
-| Interface | Used by | What it offers |
+| Interface | Used by | What it offers today |
 |---|---|---|
-| Web UI at `http://cambot-xxxx.local/` | People | Live view, timeline, ask box, settings |
-| REST `/api/v1/...` | Scripts, robot controllers | Status, frames, clips, index search, ask, marks, config |
-| MCP `/mcp` | Cursor and other agents | The same tools the on-board agent uses |
-| `cambot` CLI | Setup and bulk work | Flash, provision Wi-Fi, discover, ask, pull clips, export MP4 |
+| Registrar at `http://<host>:8765/` | People | Live view, caption/noul UI, GPT/JEV/high-perf switches, ask box, index history |
+| REST `/api/v1/...` | Scripts, registrar | Status, frame, recordings, clip.mjpg, index/latest, indexing, jev, nouls, perf |
+| MCP `/mcp` | Cursor and other agents | `get_status`, `list_recordings`, `search_index`, `read_index_page`, `inspect_window`, `make_clip`, `get_live_frame` |
+| `cambot` CLI | Setup and bulk work | **Not shipped yet** (milestone M2). Use ESP-IDF + `fixr/SETUP.md` |
 
 ## Example uses
 
 - **Lab automation.** "List every tip pickup this morning that took more than
   one attempt." "Did anyone open the enclosure during the 2 PM run?"
 - **Robot development.** The Lloyd bartender robot that produced this design
-  logs each move as a mark; the camera answers "show me the last five pours"
-  and "where did the car stop short of the tape line?"
-- **3D printer farms.** A watch list for "spaghetti", "part detached" and
-  "nozzle blob" turns the index into an alarm feed via the events endpoint.
+  is the board bring-up reference; the camera answers questions about what the
+  work cell looked like during a run.
+- **3D printer farms.** Nouls for "spaghetti", "part detached" and
+  "nozzle blob" turn the index into an alert feed via webhook.
 - **Pick-and-place and QA cells.** Count picks per hour, pull clips of
-  dropped parts, and compare robot marks to what was actually seen.
+  dropped parts, and (once marks land) compare robot claims to what was seen.
 - **Agent-driven debugging.** A coding agent fixing robot firmware can ask the
-  camera what the robot did after the last flash, instead of asking the human.
+  registrar what the camera saw after the last flash.
 
 ## Hardware
 
@@ -172,22 +172,22 @@ layout also sold by Freenove, Goouuu and Keyestudio:
 
 ![The case is split so only two small parts change per board. Everything that touches the outside world is universal.](fig/modular-stack.svg)
 
-The case has three layers of modularity:
+The printable kit that ships in this repository
+(`hardware/cambot-minimum-petg-kit/`, release 2026-11-04) is a **minimum PETG
+mount**, not the earlier sled / front-cover / clamp design:
 
-- A **board kit** (sled plus front cover) is the only part specific to a camera
-  board. Adding support for an AI-Thinker ESP32-CAM or a Seeed XIAO ESP32S3
-  Sense means designing a new sled and front cover. The shell interior is sized
-  so both fit.
-- The **rear shell** is universal. It carries the USB-C openings, the SD card
-  door, vents and the **W-Mount**: a two-finger knuckle compatible with the
-  widely used GoPro-style mount and an M5 bolt. Tilting the camera on this
-  knuckle aims it.
-- **Feet** carry the matching three-finger knuckle. Version 1 ships two: a
-  printable screw clamp for edges up to 35 mm, and a magnet puck with
-  slide-in pockets for rare-earth magnets that are glued in place. Because the
-  interface is a de facto standard, off-the-shelf GoPro mounts also work, and the
-  repo includes a parametric knuckle module and a foot template for custom
-  designs.
+- **housing_v3** — open drop-in body with two center posts and a W-Mount
+  knuckle; no front cover.
+- **retainer_v3_short** — snaps over the PCB to hold it on the posts.
+- **Modular arms** — male/female rods (25 mm and 50 mm shafts) locked with a
+  6-32 set screw.
+- **dual_magnet_foot** — three-finger W-Mount base with two external
+  rubber-coated magnets under the plate.
+
+Print the three plate 3MFs, assemble with M5 pivots and M4 magnet fasteners,
+and stick the foot to steel. Off-the-shelf GoPro mounts also mate with the
+W-Mount. Details, PETG settings and hardware are in the kit README. The
+mechanical specification tracks that kit as the current design.
 
 ### Cost
 
@@ -195,64 +195,65 @@ The case has three layers of modularity:
 |---|---|
 | ESP32-S3-CAM board with OV3660 (from a 3-pack at $34.99) | $11.70 |
 | 32 GB high-endurance microSD | $6–9 |
-| PETG for case and one foot (~40 g) | $1 |
-| M2 screws, M5 bolt and nut, 4 small magnets | $1–2 |
+| PETG for housing, retainer, arms and foot | $1–2 |
+| M5 bolts/nuts, 6-32 screw, M4 magnet hardware, 2 rubber-coated magnets | $5–10 |
 | USB-C cable and 5 V supply (often already on hand) | $0–6 |
-| **Total** | **about $20–30** |
+| **Total** | **about $25–40** |
 
 Cloud cost depends on activity, not on recording time. Each captioned keyframe
-or verification frame costs roughly as much as one small image prompt. The
-firmware enforces a daily budget in frames and tokens, and the status endpoint
-reports what has been used.
+or JEV call costs roughly as much as one small image prompt. The firmware
+enforces a daily frame budget; recording continues when indexing pauses.
 
 ## Privacy and security
 
-- Video stays on the SD card. Images go only to the model endpoint the owner
-  configures, and only when indexing or answering. Captioning can be switched off
-  entirely, turning Cambot into a plain local recorder.
+- Video stays on the SD card. Images go only to the model endpoints the owner
+  configures (OpenAI-compatible and/or TypeSafe), and only when indexing or a
+  query sends them. Captioning and JEV can each be switched off.
 - The model endpoint can be any OpenAI-compatible server, including a model
-  running on the local network, so no images need to leave the building.
-- The API requires a bearer token created during setup. The camera makes only
-  outbound connections and is meant for a trusted LAN, not for exposure to the
-  internet.
-- Secrets (Wi-Fi password, API key, token) live in the ESP32's NVS storage.
-  Production builds can turn on flash and NVS encryption.
+  running on the local network, so GPT images need not leave the building.
+- The API requires a bearer token (the camera password). The camera makes
+  outbound connections to Wi-Fi, SNTP, the registrar and the model hosts. It is
+  meant for a trusted LAN, not for exposure to the internet.
+- Today secrets are compiled into `firmware/main/secrets.h` for bring-up
+  (`CAMBOT_WIFI_*`, `CAMBOT_CAMERA_PASSWORD`, `CAMBOT_MODEL_KEY`,
+  `CAMBOT_JEV_KEY`, registrar URL). NVS-backed provisioning and encrypted
+  builds are still planned.
 
 ## Limitations
 
 - **2.4 GHz Wi-Fi only**, WPA2 or WPA3 Personal. No enterprise (802.1X) or
   captive-portal networks in version 1.
-- **Frame rate.** 5–10 fps suits robot motion at human speeds. Very fast events
-  can fall between frames; robot marks are the fix.
-- **Sparse indexing.** The index is only as good as its keyframes and watch list.
-  The verify and scan steps cover the gaps at extra cost.
-- **No audio and no H.264.** The ESP32-S3 has no video encoder; clips are MJPEG,
-  and the CLI converts them to MP4 with ffmpeg.
+- **Frame rate.** ~5 fps suits robot motion at human speeds. Very fast events
+  can fall between frames; robot marks are the planned fix.
+- **Sparse indexing.** The index is only as good as its keyframes and nouls.
+  MCP inspect/clip cover the gaps at extra cost.
+- **No audio and no H.264.** The ESP32-S3 has no video encoder; clips are MJPEG.
 - **Clock.** The board has no battery-backed clock. Until network time is
-  synced after boot, segments are marked unsynced and placed using the time of
-  the next sync.
-- **Model accuracy.** Captions can be wrong. Every answer links to the footage so
-  a person can check it.
+  synced after boot, segments are marked unsynced.
+- **Ask lives on the registrar** for now, not as `POST /api/v1/ask` on the
+  camera. The `cambot` CLI, SoftAP provisioning, on-camera web UI and OTA are
+  not shipped yet.
+- **Model accuracy.** Captions and noul scores can be wrong. Every answer links
+  to the footage so a person can check it.
 
 ## Open source plan and roadmap
 
 | Item | License (proposed) |
 |---|---|
-| Firmware, CLI, web UI | Apache-2.0 |
+| Firmware, host libraries, registrar | Apache-2.0 |
 | Case, mounts, CAD source and STL | CERN-OHL-P-2.0 |
 | Documentation | CC BY 4.0 |
 
-1. **M0–M1:** Board bring-up, SD rolling buffer, live view, REST API (porting the
-   working camera code from the Lloyd robot project).
-2. **M2:** Wi-Fi provisioning, `cambot` CLI, browser-based flasher, and the
-   agent-readable setup guide.
-3. **M3:** Activity detection, captioning, watch lists, robot marks, and index
-   search.
-4. **M4:** On-board agent, `/ask`, and the MCP server.
-5. **M5:** Over-the-air (OTA) updates, encrypted builds, and a second board kit.
-6. **Later:** Caption embeddings, and a multi-camera hub so one question can
-   search a whole room.
+| Milestone | Status |
+|---|---|
+| **M0–M1** Board bring-up, SD rolling buffer, REST, live frame, clips, eviction | **Done** in `firmware/` |
+| **M2** Wi-Fi provisioning, `cambot` CLI, browser flasher | Not started; `fixr/SETUP.md` + secrets.h is the path today |
+| **M3** Activity, on-device GPT + JEV index, nouls, registrar live UI | **Done** |
+| **M4a** MCP on camera; registrar ask + index history | **Done** |
+| **M4b** On-board `/ask` agent, marks, full index search API | Planned |
+| **M5** OTA with rollback, encrypted builds, second board kit | Planned |
+| **Later** Embeddings, multi-camera hub, clamp foot, front cover | Planned |
 
-Companion documents: the **mechanical spec for Astra** (case and mount CAD),
-the **firmware repository plan**, and the **setup guide**, which is written so a
-person or a coding agent can follow it step by step.
+Companion documents: the **mechanical specification** (current PETG kit), the
+**firmware repository plan** (tree, API and remaining work), and the **setup
+guide** in `fixr/SETUP.md`, written so a person or a coding agent can follow it.

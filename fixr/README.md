@@ -71,8 +71,9 @@ override variables already set in the environment. Put
 `CAMBOT_CAMERA_PASSWORD=...` in that file. Do not commit it, and do not paste
 the value into chat.
 
-The programming environment in the repository plan is ESP-IDF 5.x in C.
-This machine has v5.5.6, which the plan does not pin. `firmware/` is the setup
-test. It joins Wi-Fi, POSTs `/api/register`, and serves the live frame. The
-Cambot firmware itself is a later step. `cambot` ships with milestone M2.
-Until then, do not invent `cambot` commands.
+The programming environment is ESP-IDF 5.x in C. This machine has v5.5.6,
+which the software plan does not pin. `firmware/` is the Cambot bring-up
+image: it records to the SD card, indexes with GPT/JEV when enabled, joins
+Wi-Fi, POSTs `/api/register`, and serves REST/MCP. The `cambot` CLI still
+ships with milestone M2. Until then, do not invent `cambot` commands; follow
+`SETUP.md` and flash with ESP-IDF.
