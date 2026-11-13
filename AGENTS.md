@@ -1,16 +1,16 @@
 # Agent instructions
 
-This repository is Gizmonic Cambot: the bring-up firmware in `firmware/`, the
-printable case in `hardware/`, the FIXR setup path and registrar, and the
+This repository is **gizmonic-cambot**: the bring-up firmware in `firmware/`,
+the printable case in `hardware/`, the FIXR setup path and registrar, and the
 design documents. The `cambot` CLI described for milestone M2 does not exist
 here yet.
 
 ## Which document to follow
 
 - Setting up a physical camera: follow `fixr/SETUP.md` from the top. Section 0
-  is the contract. Read the profile for this computer next
-  (`fixr/profiles/waterbear.json` and `fixr/profiles/waterbear.md` on this
-  machine). The `cambot` commands in that guide ship with firmware
+  is the contract. Read the closest host profile next
+  (`fixr/profiles/<id>.json` and the matching `.md`; the shipped example is
+  `macos-arm64`). The `cambot` commands in that guide ship with firmware
   milestone M2; until then, say so instead of inventing commands.
 - Designing or changing the case and mounts: `docs/src/astra-mechanical-spec.md`.
   Dimensions marked TBV are not confirmed. Do not replace them with guesses.
@@ -40,11 +40,19 @@ up, from this repo or another.
    step's fix table, then the troubleshooting section. Stop after two failed
    attempts at the same step and report what you saw.
 
+## Host profiles and pull requests
+
+Profiles under `fixr/profiles/` are shared install guidance for agents.
+After a successful setup, if this host needed different tools, paths, or
+workarounds than the closest existing profile, add or update
+`profiles/<id>.json` and `profiles/<id>.md` (no secrets) and open a pull
+request so other architectures benefit.
+
 ## Working in this repository
 
 - Edit the Markdown in `docs/src` and `fixr/SETUP.md`, then rebuild with
   `docs/build.sh`. Commit the sources and the rebuilt HTML and PDF together.
 - Do not commit secrets. `secrets.h`, `.env`, and credential files stay out.
-- `reference/from-lloyd-barbot/` is a copy of the board bring-up that the
-  documents were written from. Change the documents when the design changes;
-  do not silently "fix" that reference to match.
+- Copy `firmware/main/secrets.h.example` to `secrets.h` and fill every required
+  field before building. Set `CAMBOT_TZ` or `TZ` on the host to the same IANA
+  zone used in `CAMBOT_TZ` inside `secrets.h`.

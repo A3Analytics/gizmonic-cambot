@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "id": "waterbear",
+  "id": "macos-arm64",
   "observed_at": "2026-10-31",
   "os": {
     "family": "darwin",
@@ -8,10 +8,10 @@
     "version": "26.6.2",
     "build": "25G83",
     "arch": "arm64",
-    "cpu": "Apple M4 Max",
+    "cpu": "Apple Silicon",
     "logical_cpu": 16,
     "shell": "zsh",
-    "hostname": "Waterbear.local"
+    "hostname": "example-mac.local"
   },
   "python": {
     "path_default": {
@@ -41,9 +41,9 @@
   },
   "network": {
     "interface": "en0",
-    "lan_ipv4": "192.168.68.91",
-    "wifi_ssid": "Figaro",
-    "wifi_band_note": "The camera requires 2.4 GHz WPA2 or WPA3 Personal. This router was not checked.",
+    "lan_ipv4": "192.168.1.10",
+    "wifi_ssid": "",
+    "wifi_band_note": "Ask the user for the 2.4 GHz WPA2/WPA3 Personal SSID. Do not guess it.",
     "registrar_port": 8765
   },
   "secrets": {
@@ -61,9 +61,11 @@
     }
   },
   "ask_before_setup": [
-    "Wi-Fi password, via CAMBOT_WIFI_PASSWORD or fixr/run/secrets.env",
-    "Camera access password, via CAMBOT_CAMERA_PASSWORD or fixr/run/secrets.env",
-    "Confirm the Wi-Fi name Figaro is the 2.4 GHz network"
+    "Wi-Fi SSID (2.4 GHz) and password via CAMBOT_WIFI_PASSWORD or fixr/run/secrets.env",
+    "Camera access password via CAMBOT_CAMERA_PASSWORD or fixr/run/secrets.env",
+    "IANA time zone for the host (also set CAMBOT_TZ or TZ for the registrar)",
+    "One or two sentences describing what the camera watches",
+    "Optional model endpoint and CAMBOT_MODEL_KEY"
   ],
   "install_notes": [
     {
@@ -99,27 +101,27 @@
     {
       "step": "s3-port",
       "result": "ok",
-      "detail": "TTL port /dev/cu.usbserial-11230. esptool identified ESP32-S3 revision v0.2, embedded 8 MB PSRAM, MAC 1c:29:04:31:0d:98."
+      "detail": "TTL port looked like /dev/cu.usbserial-XXXX. esptool identified ESP32-S3 with embedded 8 MB PSRAM. Port name changes on replug."
     },
     {
       "step": "s4-flash",
       "result": "ok",
-      "detail": "Flashed the setup test at 115200 on /dev/cu.usbserial-11230. Boot log: boot=HELLO cambot fw=setup id=cambot-0d98, flash_mb=16, psram_mb=8, camera=ok pid=0x3660."
+      "detail": "Flashed the bring-up image at 115200 on the TTL port. Boot log: boot=HELLO cambot fw=setup, flash_mb=16, psram_mb=8, camera=ok pid=0x3660. Use 115200; 460800 drops on this board's CH340."
     },
     {
       "step": "s5-wifi",
       "result": "ok",
-      "detail": "Joined Figaro as WPA3-SAE. Two earlier attempts logged wifi=disconnected reason=2 and reason=204, then wifi=ip=192.168.68.51. RSSI was about -26."
+      "detail": "Joined the user's 2.4 GHz network as WPA3-SAE. Early wifi=disconnected reason=2 / reason=204 can appear once before wifi=ip=...; that is not a failure if register=ok follows."
     },
     {
       "step": "register",
       "result": "ok",
-      "detail": "POST /api/register returned register=ok id=cambot-0d98. The registrar at 192.168.68.91:8765 listed that camera and fetched a 8947-byte JPEG from GET /api/v1/frame.jpg. The page refreshes the view every two seconds."
+      "detail": "POST /api/register returned register=ok. The registrar listed the camera and fetched GET /api/v1/frame.jpg. Detect the host LAN address at setup time; do not reuse a stale profile IP."
     },
     {
       "step": "registrar",
       "result": "ok",
-      "detail": "fixr/registrar/serve.py --check registered a local client, listed it, and served the page. Frame fetch returned 503 because CAMBOT_CAMERA_PASSWORD was not set. A camera on the LAN still cannot register until firmware sends POST /api/register."
+      "detail": "fixr/registrar/serve.py --check registered a local client, listed it, and served the page. Frame fetch returns 503 until CAMBOT_CAMERA_PASSWORD is set."
     }
   ]
 }

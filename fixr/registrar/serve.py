@@ -37,15 +37,59 @@ else:
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
-LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 MODEL_NAME = "gpt-4.1-mini"
 INDEX_LIMIT = 400
 RUN = ROOT / "run"
 REGISTRY = RUN / "cameras.json"
 INDEX_DB = RUN / "index.sqlite"
 INDEX_STORE: IndexStore | None = None
-PROFILE = ROOT / "profiles" / "waterbear.json"
 HOST_SCHEMA = ROOT / "schema" / "host-profile.schema.json"
+
+
+def resolve_profile() -> Path:
+    """Host profile for --check. Override with CAMBOT_HOST_PROFILE."""
+    raw = os.environ.get("CAMBOT_HOST_PROFILE", "").strip()
+    if raw:
+        path = Path(raw)
+        if not path.is_absolute():
+            candidate = ROOT / "profiles" / path
+            if candidate.suffix != ".json":
+                candidate = candidate.with_suffix(".json")
+            path = candidate if candidate.exists() else ROOT / "profiles" / raw
+        return path
+    profiles = sorted((ROOT / "profiles").glob("*.json"))
+    if not profiles:
+        raise SystemExit("no host profile under fixr/profiles/")
+    return profiles[0]
+
+
+def resolve_local_tz() -> ZoneInfo:
+    """IANA zone from CAMBOT_TZ, TZ, or the host profile setup.time_zone."""
+    for key in ("CAMBOT_TZ", "TZ"):
+        raw = os.environ.get(key, "").strip()
+        if not raw:
+            continue
+        try:
+            return ZoneInfo(raw)
+        except Exception as exc:
+            raise SystemExit(f"invalid {key}={raw!r}; use an IANA name such as America/Los_Angeles") from exc
+    try:
+        profile = json.loads(resolve_profile().read_text())
+        raw = str(profile.get("setup", {}).get("time_zone") or "").strip()
+        if raw:
+            return ZoneInfo(raw)
+    except SystemExit:
+        raise
+    except Exception:
+        pass
+    raise SystemExit(
+        "set CAMBOT_TZ or TZ to an IANA time zone (for example America/Los_Angeles), "
+        "or put setup.time_zone in the host profile"
+    )
+
+
+def local_tz_name() -> str:
+    return str(resolve_local_tz())
 FRAME_PATH = "/api/v1/frame.jpg"
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$")
 EXAMPLE_RE = re.compile(
@@ -1596,7 +1640,9 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
     key = model_key()
     if not key:
         raise QueryError(503, "CAMBOT_MODEL_KEY is not set")
-    now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+    tz = resolve_local_tz()
+    tz_name = str(tz)
+    now = datetime.now(tz).isoformat(timespec="seconds")
     note = ""
     if truncated:
         note = f"Only the newest {INDEX_LIMIT} keyframes are included.\n"
@@ -1604,7 +1650,7 @@ def answer_question(question: str, records: list[dict], recordings: str, truncat
         "You answer questions about a single Gizmonic Cambot using only the keyframe index below.\n"
         "Each record is one keyframe. The camera writes one on the first frame, then about every "
         "1.5 seconds.\n"
-        "Record times are UTC. Answer in America/Los_Angeles local time, and say how long ago that was "
+        f"Record times are UTC. Answer in {tz_name} local time, and say how long ago that was "
         f"relative to the current time, {now}.\n"
         "GPT captions may be empty when GPT indexing is off. That does not mean nothing was seen.\n"
         "The watch field is the primary evidence for noul questions: each key is a label, each value is "
@@ -1655,13 +1701,15 @@ def answer_from_history(question: str, summary: dict, recordings: str) -> str:
     key = model_key()
     if not key:
         raise QueryError(503, "CAMBOT_MODEL_KEY is not set")
-    now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+    tz = resolve_local_tz()
+    tz_name = str(tz)
+    now = datetime.now(tz).isoformat(timespec="seconds")
     prompt = (
         "You answer questions about a single Gizmonic Cambot using only the history below.\n"
         "The history is the camera's keyframe index, copied onto this computer. It can cover "
         "several days. It is not a live card scan.\n"
         "Each keyframe is about 1.5 seconds apart. Times in the history are UTC. Answer in "
-        f"America/Los_Angeles local time, and say how long ago that was relative to {now}.\n"
+        f"{tz_name} local time, and say how long ago that was relative to {now}.\n"
         "labels maps a watch label to its evidence. yes_frames is how many keyframes scored "
         "0.5 or higher. episodes is how many separate sightings that was, split when the label "
         "was absent for more than 5 seconds. latest_episodes lists the newest of those sightings. "
@@ -2343,7 +2391,8 @@ def serve(
 
 
 def check_profile() -> None:
-    profile = json.loads(PROFILE.read_text())
+    profile_path = resolve_profile()
+    profile = json.loads(profile_path.read_text())
     schema = json.loads(HOST_SCHEMA.read_text())
     missing = [key for key in schema["required"] if key not in profile]
     if missing:
@@ -2567,8 +2616,10 @@ def main() -> int:
     ip = lan_ip()
     password_state = "set" if os.environ.get("CAMBOT_CAMERA_PASSWORD") else "missing"
     model_state = "set" if model_key() else "missing"
+    tz_name = local_tz_name()
     print(f"registrar=http://{ip}:{PORT}/", flush=True)
     print(f"register=POST http://{ip}:{PORT}/api/register", flush=True)
+    print(f"tz={tz_name}", flush=True)
     print(f"camera_password={password_state}", flush=True)
     print(f"model_key={model_state}", flush=True)
     print(f"frame={FRAME_PATH}", flush=True)

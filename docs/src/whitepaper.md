@@ -142,9 +142,8 @@ cover the same jobs for people and for coding agents.
 
 - **Lab automation.** "List every tip pickup this morning that took more than
   one attempt." "Did anyone open the enclosure during the 2 PM run?"
-- **Robot development.** The Lloyd bartender robot that produced this design
-  is the board bring-up reference; the camera answers questions about what the
-  work cell looked like during a run.
+- **Robot development.** Mount the camera over a work cell and ask what the
+  robot did during a run, without scrubbing through raw video by hand.
 - **3D printer farms.** Nouls for "spaghetti", "part detached" and
   "nozzle blob" turn the index into an alert feed via webhook.
 - **Pick-and-place and QA cells.** Count picks per hour, pull clips of
@@ -215,9 +214,10 @@ enforces a daily frame budget; recording continues when indexing pauses.
   outbound connections to Wi-Fi, SNTP, the registrar and the model hosts. It is
   meant for a trusted LAN, not for exposure to the internet.
 - Today secrets are compiled into `firmware/main/secrets.h` for bring-up
-  (`CAMBOT_WIFI_*`, `CAMBOT_CAMERA_PASSWORD`, `CAMBOT_MODEL_KEY`,
-  `CAMBOT_JEV_KEY`, registrar URL). NVS-backed provisioning and encrypted
-  builds are still planned.
+  (copy from `secrets.h.example`: `CAMBOT_WIFI_*`, `CAMBOT_CAMERA_PASSWORD`,
+  `CAMBOT_REGISTRAR_URL`, `CAMBOT_TZ`, optional `CAMBOT_MODEL_KEY` /
+  `CAMBOT_JEV_KEY`). NVS-backed provisioning and encrypted builds are still
+  planned.
 
 ## Limitations
 

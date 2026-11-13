@@ -1,7 +1,7 @@
 [project]
-name = "cambot-host"
+name = "gizmonic-cambot"
 version = "0.1.0"
-description = "Host-side Cambot model, storage, index, and MCP tests"
+description = "Host-side Gizmonic Cambot model, storage, index, and MCP tests"
 requires-python = ">=3.10"
 dependencies = ["pillow"]
 

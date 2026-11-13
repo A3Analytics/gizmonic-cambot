@@ -29,14 +29,38 @@ These are pivot distances, not steel-to-lens reach. Camera position also depends
 - Arms: existing revision A geometry, 25 and 50 mm shafts. 12 mm spigot, 12.4 mm bore, minimum 20 mm engagement. No change to the sliding fit or direct-thread locking pilot in this bundle.
 - Foot: latest dual external-magnet base with peel lip, 56 mm magnet spacing, 32 mm width, 6 mm plate, reinforced joint roots. Magnets mount UNDER the flat base, directly against steel. Top recesses are for fasteners and washers.
 
-## Hardware for one assembled unit
+## Bill of materials (one assembled unit)
 
-- 2 × M5 × 25 bolts/thumbscrews and 2 × M5 nuts for end pivots; verify bolt reach with your hardware.
-- 1 × 6-32 machine screw, approximately 3/8 in long, for the arm locking pilot. Start by hand. The 2.8 mm pilot and screw reach require test-fitting in PETG; do not force it. No printed clamp screw/nut is used.
-- 2 × rubber-coated mounting magnets: nominal 22 mm diameter, M4 mounting point. 25–30 mm alternatives also fit the flat underside; 32 mm is the maximum without side overhang. Check the mounting back is flat.
-- 2 × M4 washers, approximately 12 mm OD, 1 mm thick, plus suitable metal M4 fasteners. For male studs use nuts; for female threads use screws. There is 4 mm of PETG below each washer recess. Confirm stud length/thread depth before choosing hardware; do not bottom out a screw or crush PETG.
+Printed parts (from this kit) plus fasteners and magnets:
 
-Reference magnet: https://radialmagnet.com/our-magnets/22mm-rubber-coated-outdoor-magnetic-assembly-base-holds-up-to-8-lbs/ (SKU 9763, manufacturer lists 22 mm, M4, 8.1 lb pull). Exact thread gender/depth/projection was not established. Pull ratings do not establish the assembled arm's working load.
+| Qty | Part | Purpose |
+|---:|---|---|
+| 1 | `housing_v3` | Camera case |
+| 1 | `retainer_v3_short` | Holds the PCB on the case posts |
+| 1 | Male rod (`rod_male_25` or `rod_male_50`) | Arm half toward the foot |
+| 1 | Female rod (`rod_female_25_6-32` or `rod_female_50_6-32`) | Arm half toward the case |
+| 1 | `dual_magnet_foot` | Steel-surface base |
+| 2 | M5 × 25 mm bolts or thumbscrews | End pivots (foot↔male rod, female rod↔case) |
+| 2 | M5 nuts | Pair with the M5 pivots; verify bolt reach |
+| 1 | 6-32 machine screw, ~3/8 in (≈10 mm) | Locks arm length in the female-rod pilot |
+| 2 | Rubber-coated mounting magnets, Ø ~22 mm, M4 | Mount **under** the foot; magnetic faces to steel |
+| 2 | M4 washers, ~12 mm OD × ~1 mm thick | Sit in the top recesses over each magnet stud |
+| 2 | M4 nuts or screws | Match magnet stud/thread gender |
+
+**Magnets.** Nominal 22 mm diameter with an M4 mounting point. 25–30 mm
+alternatives also fit the flat underside; 32 mm is the maximum without side
+overhang. The mounting back must be flat. Reference part: [Radial Magnet
+22 mm rubber-coated outdoor assembly, SKU 9763](https://radialmagnet.com/our-magnets/22mm-rubber-coated-outdoor-magnetic-assembly-base-holds-up-to-8-lbs/)
+(manufacturer lists 22 mm, M4, 8.1 lb pull). Exact thread gender, depth, and
+stud projection were not established for every vendor. Pull ratings do not
+establish the assembled arm’s working load.
+
+**Arm lock screw.** Start the 6-32 by hand in the 2.8 mm PETG pilot. Do not
+force it. No printed clamp screw or nut is used.
+
+**Magnet fasteners.** There is 4 mm of PETG below each washer recess. Confirm
+stud length or thread depth before choosing hardware; do not bottom out a
+screw or crush the PETG.
 
 ## PETG printing
 
@@ -75,4 +99,4 @@ They write outputs beside their respective source folders. Housing and arms read
 
 Run `python source/verify_release.py` to check this release's printable files. No CAD regeneration or physical tests are implied by these checks.
 
-See LICENSE.md for the inherited design license and provenance. This package is prepared for copying into a repository; it has not been published or committed to a remote repository.
+See LICENSE.md for the inherited design license and provenance.

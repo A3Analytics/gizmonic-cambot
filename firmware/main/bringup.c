@@ -29,7 +29,7 @@
 
 #define WIFI_CONNECTED_BIT BIT0
 
-/* Pins from reference/from-lloyd-barbot/camera_pins.h.
+/* FORIOT ESP32-S3-CAM pin map.
  * Y2..Y9 are DVP D0..D7. Same wiring as CAMERA_MODEL_ESP32S3_EYE. */
 static const camera_config_t camera_cfg = {
     .pin_pwdn = -1,
@@ -141,7 +141,10 @@ static void register_once(void) {
 }
 
 static void register_task(void *arg) {
-    cambot_time_start("America/Los_Angeles");
+#ifndef CAMBOT_TZ
+#define CAMBOT_TZ "UTC"
+#endif
+    cambot_time_start(CAMBOT_TZ);
     while (1) {
         xEventGroupWaitBits(wifi_events, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
         register_once();

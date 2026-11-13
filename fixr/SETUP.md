@@ -15,14 +15,18 @@ this computer. Do not invent <code>cambot</code> commands.
 
 ## Proven on
 
-This guide was carried out on [Waterbear](profiles/waterbear.json). The notes
-from that run are [profiles/waterbear.md](profiles/waterbear.md).
+This guide was first carried out on the host documented in
+[profiles/macos-arm64.json](profiles/macos-arm64.json). Notes from that run
+are [profiles/macos-arm64.md](profiles/macos-arm64.md). Treat that pair as a
+worked example for Apple Silicon macOS, not as your machine.
 
-An agent reads this file first, then the profile for the computer it is on.
-If these steps fail on another system, add `profiles/<id>.json` matching
+An agent reads this file first, then the closest profile for the computer it
+is on. If these steps fail on another system, or you learn something useful for
+Linux, Windows, or another macOS layout, add `profiles/<id>.json` matching
 [schema/host-profile.schema.json](schema/host-profile.schema.json) and
-`profiles/<id>.md` describing what that computer needed. Leave every secret
-value out of both files.
+`profiles/<id>.md` describing what that computer needed, leave every secret
+value out of both files, and open a pull request so other agents can reuse the
+tips.
 
 ## 0. Agent contract (read first)
 
@@ -39,7 +43,7 @@ the user's editor.
 | Wi-Fi SSID | Must be a **2.4 GHz** network, WPA2 or WPA3 Personal |
 | Wi-Fi password | Have the user type it into a hidden prompt, or set `CAMBOT_WIFI_PASSWORD` themselves |
 | Model endpoint | Base URL, model name, API key. Optional; recording works without it. |
-| Time zone | IANA name such as `America/Los_Angeles` |
+| Time zone | IANA name such as `America/Los_Angeles`; set `CAMBOT_TZ` or `TZ` on the host |
 | What the camera watches | One or two sentences, for the scene profile |
 
 **Rules:**

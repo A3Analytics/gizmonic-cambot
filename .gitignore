@@ -6,13 +6,12 @@ __pycache__/
 .env
 **/.env
 **/secrets.h
-openai_api_key.txt
-jev_api_key.txt
-figaro_pw.txt
+*_api_key.txt
+*_pw.txt
+*_password.txt
 fixr/run/
 firmware/build/
 firmware/sdkconfig
 firmware/sdkconfig.old
 firmware/managed_components/
 test/host/c/*_bin
-

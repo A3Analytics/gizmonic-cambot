@@ -305,13 +305,17 @@ with the registrar on this computer. Do not invent <code>cambot</code>
 commands.</p>
 </div>
 <h2 id="proven-on">Proven on</h2>
-<p>This guide was carried out on <a href="profiles/waterbear.json">Waterbear</a>. The notes from that run
-are <a href="profiles/waterbear.md">profiles/waterbear.md</a>.</p>
-<p>An agent reads this file first, then the profile for the computer it
-is on. If these steps fail on another system, add
+<p>This guide was first carried out on the host documented in <a href="profiles/macos-arm64.json">profiles/macos-arm64.json</a>. Notes
+from that run are <a href="profiles/macos-arm64.md">profiles/macos-arm64.md</a>. Treat that
+pair as a worked example for Apple Silicon macOS, not as your
+machine.</p>
+<p>An agent reads this file first, then the closest profile for the
+computer it is on. If these steps fail on another system, or you learn
+something useful for Linux, Windows, or another macOS layout, add
 <code>profiles/&lt;id&gt;.json</code> matching <a href="schema/host-profile.schema.json">schema/host-profile.schema.json</a>
 and <code>profiles/&lt;id&gt;.md</code> describing what that computer
-needed. Leave every secret value out of both files.</p>
+needed, leave every secret value out of both files, and open a pull
+request so other agents can reuse the tips.</p>
 <h2 id="agent-contract-read-first">0. Agent contract (read first)</h2>
 <p>This section is for coding agents. People can skip to section 1.</p>
 <p><strong>Goal:</strong> a Gizmonic Cambot is recording to its SD card,
@@ -348,7 +352,8 @@ it.</td>
 </tr>
 <tr>
 <td>Time zone</td>
-<td>IANA name such as <code>America/Los_Angeles</code></td>
+<td>IANA name such as <code>America/Los_Angeles</code>; set
+<code>CAMBOT_TZ</code> or <code>TZ</code> on the host</td>
 </tr>
 <tr>
 <td>What the camera watches</td>

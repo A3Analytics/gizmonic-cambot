@@ -16,7 +16,7 @@ date: "Plan rev B · November 2026"
 - Set up from a fresh board to a camera on the network by following
   `fixr/SETUP.md`, driven by a person or by a coding agent.
 - Support more than one camera board through board-support packages (today:
-  FORIOT pin map from the Lloyd reference).
+  the FORIOT ESP32-S3-CAM pin map in `firmware/main/bringup.c`).
 
 **Non-goals for v1:** audio, H.264, cloud video storage, face recognition,
 exposure to the public internet, enterprise Wi-Fi.
@@ -36,7 +36,7 @@ gizmonic-cambot/
 ├── fixr/
 │   ├── SETUP.md           agent-readable setup guide (canonical)
 │   ├── README.md
-│   ├── profiles/          per-computer JSON + notes (e.g. waterbear)
+│   ├── profiles/          per-computer JSON + notes (worked examples)
 │   ├── schema/            host-profile and camera-registration schemas
 │   └── registrar/         LAN web UI, ask, index.sqlite sync
 ├── firmware/              ESP-IDF 5.x project (`cambot_bringup`)
@@ -58,15 +58,13 @@ gizmonic-cambot/
 ├── test/
 │   ├── host/              Python + C unit tests
 │   └── hil/               hardware-in-the-loop helpers
-└── reference/from-lloyd-barbot/   board bring-up this firmware grew from
 ```
 
-**Why ESP-IDF rather than Arduino.** The Lloyd prototype used Arduino, which
-was fine for one endpoint. Cambot needs FreeRTOS task priorities, the IDF HTTP
-server with several concurrent sockets, SDMMC/FATFS tuning and room for OTA
-later. The prototype's working camera settings (pin map, `CAMERA_GRAB_LATEST`,
-OV3660 warm-up) carry over. PlatformIO is optional and unused in the current
-path.
+**Why ESP-IDF rather than Arduino.** Cambot needs FreeRTOS task priorities, the
+IDF HTTP server with several concurrent sockets, SDMMC/FATFS tuning and room
+for OTA later. The FORIOT pin map, `CAMERA_GRAB_LATEST`, and OV3660 warm-up
+live in the bring-up firmware. PlatformIO is optional and unused in the
+current path.
 
 ## 3. Runtime architecture
 
@@ -118,7 +116,7 @@ Recording continues if indexing is paused by budget or by the registrar's Dev
 mode.
 
 **Card:** FAT32, high-endurance recommended. Mount in 1-bit SDMMC on CLK 39,
-CMD 38, D0 40 (FORIOT map from the Lloyd pins header).
+CMD 38, D0 40 (FORIOT ESP32-S3-CAM map).
 
 ## 5. Indexing pipeline (on device)
 
@@ -200,8 +198,9 @@ poll, `GET`/`PATCH /api/v1/config`, `POST /api/v1/ota`, mDNS
 ## 9. Provisioning and configuration (today)
 
 - **Compile-time secrets.** Copy `firmware/main/secrets.h.example` to
-  `secrets.h`. Fill SSID, Wi-Fi password, camera password, registrar URL and
-  model keys. Never commit the copy.
+  `secrets.h`. Fill every required field in that template (SSID, Wi-Fi
+  password, camera password, registrar URL, `CAMBOT_TZ`, optional model keys).
+  Never commit the copy.
 - **Flash.** ESP-IDF 5.x on the TTL UART (CH340) at 115200. Physical BOOT/RST
   steps are in `fixr/SETUP.md`.
 - **Join and register.** Firmware joins the 2.4 GHz network, serves HTTP, and

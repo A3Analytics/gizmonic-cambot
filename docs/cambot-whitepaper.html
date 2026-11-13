@@ -413,9 +413,9 @@ nouls, perf</td>
 <li><strong>Lab automation.</strong> “List every tip pickup this morning
 that took more than one attempt.” “Did anyone open the enclosure during
 the 2 PM run?”</li>
-<li><strong>Robot development.</strong> The Lloyd bartender robot that
-produced this design is the board bring-up reference; the camera answers
-questions about what the work cell looked like during a run.</li>
+<li><strong>Robot development.</strong> Mount the camera over a work
+cell and ask what the robot did during a run, without scrubbing through
+raw video by hand.</li>
 <li><strong>3D printer farms.</strong> Nouls for “spaghetti”, “part
 detached” and “nozzle blob” turn the index into an alert feed via
 webhook.</li>
@@ -562,10 +562,11 @@ makes outbound connections to Wi-Fi, SNTP, the registrar and the model
 hosts. It is meant for a trusted LAN, not for exposure to the
 internet.</li>
 <li>Today secrets are compiled into <code>firmware/main/secrets.h</code>
-for bring-up (<code>CAMBOT_WIFI_*</code>,
-<code>CAMBOT_CAMERA_PASSWORD</code>, <code>CAMBOT_MODEL_KEY</code>,
-<code>CAMBOT_JEV_KEY</code>, registrar URL). NVS-backed provisioning and
-encrypted builds are still planned.</li>
+for bring-up (copy from <code>secrets.h.example</code>:
+<code>CAMBOT_WIFI_*</code>, <code>CAMBOT_CAMERA_PASSWORD</code>,
+<code>CAMBOT_REGISTRAR_URL</code>, <code>CAMBOT_TZ</code>, optional
+<code>CAMBOT_MODEL_KEY</code> / <code>CAMBOT_JEV_KEY</code>). NVS-backed
+provisioning and encrypted builds are still planned.</li>
 </ul>
 <h2 id="limitations">Limitations</h2>
 <ul>
